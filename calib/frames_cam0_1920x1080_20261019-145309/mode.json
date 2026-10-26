@@ -1,0 +1,18 @@
+{
+  "camera": 0,
+  "image_size": [
+    1920,
+    1080
+  ],
+  "fourcc": "",
+  "autofocus": 0,
+  "focus": 182,
+  "board": {
+    "name": "10mm",
+    "cols": 16,
+    "rows": 23,
+    "square": 10.0,
+    "marker": 7.0,
+    "first_id": 0
+  }
+}

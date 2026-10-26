@@ -1,0 +1,2263 @@
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\WINDOWS\System32> cd ~
+PS C:\Users\USER> cd .\proj_pt\
+PS C:\Users\USER\proj_pt> cd .\scripts\
+PS C:\Users\USER\proj_pt\scripts> ls
+
+
+    Каталог: C:\Users\USER\proj_pt\scripts
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        12.10.2026     18:18                __pycache__
+-a----        12.10.2026     16:48           5736 autofocus.py
+-a----        12.10.2026     16:48          19500 calibrate_distortion.py
+-a----        07.10.2026     15:18           8657 camera_params.py
+-a----        12.10.2026     17:50          10875 compare_modes.py
+-a----        12.10.2026     17:50           9133 detect_markers.py
+-a----        12.10.2026     14:51          13460 detect_point.py
+-a----        07.10.2026     13:00           2204 list_cameras.py
+-a----        07.10.2026     15:17           3501 list_formats.py
+-a----        12.10.2026     15:11          10523 make_chessboard.py
+-a----        12.10.2026     14:53           8154 make_markers.py
+-a----        12.10.2026     18:18          47320 survey_markers.py
+
+
+PS C:\Users\USER\proj_pt\scripts> py .\detect_markers.py
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 432 из camera_params_0.json (автофокус выключен)
+
+Живая детекция печатных меток ArUco (из scripts/make_markers.py) - 4 угла
+стола. Для каждой найденной метки: ID, к какому углу стола она относится,
+центр и 4 угла в пикселях (субпиксельно). Если видны все ожидаемые метки -
+рисуется контур стола по их центрам.
+
+Фокус: при открытии камеры выставляется сохранённый (calib/camera_params_<N>.json).
+Клавиша f - автофокус по самой метке (резкость считается в области метки,
+если её не видно - по центру кадра); результат сохраняется и подхватывается
+всеми остальными скриптами.
+
+Привязка меток к координатам станка - scripts/survey_markers.py.
+
+Запуск:
+    python scripts/detect_markers.py --camera 0
+    python scripts/detect_markers.py --camera 1 --width 1280 --height 720
+
+Управление:
+    f       - автофокус по метке и сохранение фокуса (ESC - прервать)
+    p       - напечатать координаты всех найденных меток в консоль
+    s       - сохранить их в calib/markers_px_cam<index>.json (с размером кадра)
+    j       - тест дрожания: копит --samples кадров при неподвижной камере и
+              печатает std центров меток в px (чем меньше, тем стабильнее детекция)
+    q/ESC   - выход
+    трекбар zoom % - масштаб окна (детекция всегда по полному кадру)
+
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 171, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 132, in main
+    show_scaled(win, vis, get_zoom(win))
+                          ~~~~~~~~^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'detect_markers [0]' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt\scripts> py .\detect_markers.py --camera 0
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 432 из camera_params_0.json (автофокус выключен)
+
+Живая детекция печатных меток ArUco (из scripts/make_markers.py) - 4 угла
+стола. Для каждой найденной метки: ID, к какому углу стола она относится,
+центр и 4 угла в пикселях (субпиксельно). Если видны все ожидаемые метки -
+рисуется контур стола по их центрам.
+
+Фокус: при открытии камеры выставляется сохранённый (calib/camera_params_<N>.json).
+Клавиша f - автофокус по самой метке (резкость считается в области метки,
+если её не видно - по центру кадра); результат сохраняется и подхватывается
+всеми остальными скриптами.
+
+Привязка меток к координатам станка - scripts/survey_markers.py.
+
+Запуск:
+    python scripts/detect_markers.py --camera 0
+    python scripts/detect_markers.py --camera 1 --width 1280 --height 720
+
+Управление:
+    f       - автофокус по метке и сохранение фокуса (ESC - прервать)
+    p       - напечатать координаты всех найденных меток в консоль
+    s       - сохранить их в calib/markers_px_cam<index>.json (с размером кадра)
+    j       - тест дрожания: копит --samples кадров при неподвижной камере и
+              печатает std центров меток в px (чем меньше, тем стабильнее детекция)
+    q/ESC   - выход
+    трекбар zoom % - масштаб окна (детекция всегда по полному кадру)
+
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 171, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 132, in main
+    show_scaled(win, vis, get_zoom(win))
+                          ~~~~~~~~^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'detect_markers [0]' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt\scripts> py .\detect_markers.py --camera 1
+[ WARN:0@0.212] global cap.cpp:477 cv::VideoCapture::open VIDEOIO(DSHOW): backend is generally available but can't be used to capture by index
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 171, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 65, in main
+    cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
+  File "C:\Users\USER\proj_pt\common\camera.py", line 62, in open_camera
+    raise RuntimeError(f"Не удалось открыть камеру {index}")
+RuntimeError: Не удалось открыть камеру 1
+PS C:\Users\USER\proj_pt\scripts> py .\detect_markers.py --camera 1
+[ WARN:0@0.105] global cap.cpp:477 cv::VideoCapture::open VIDEOIO(DSHOW): backend is generally available but can't be used to capture by index
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 171, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 65, in main
+    cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
+  File "C:\Users\USER\proj_pt\common\camera.py", line 62, in open_camera
+    raise RuntimeError(f"Не удалось открыть камеру {index}")
+RuntimeError: Не удалось открыть камеру 1
+PS C:\Users\USER\proj_pt\scripts> py .\detect_markers.py --camera 1
+Камера 1: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+
+Живая детекция печатных меток ArUco (из scripts/make_markers.py) - 4 угла
+стола. Для каждой найденной метки: ID, к какому углу стола она относится,
+центр и 4 угла в пикселях (субпиксельно). Если видны все ожидаемые метки -
+рисуется контур стола по их центрам.
+
+Фокус: при открытии камеры выставляется сохранённый (calib/camera_params_<N>.json).
+Клавиша f - автофокус по самой метке (резкость считается в области метки,
+если её не видно - по центру кадра); результат сохраняется и подхватывается
+всеми остальными скриптами.
+
+Привязка меток к координатам станка - scripts/survey_markers.py.
+
+Запуск:
+    python scripts/detect_markers.py --camera 0
+    python scripts/detect_markers.py --camera 1 --width 1280 --height 720
+
+Управление:
+    f       - автофокус по метке и сохранение фокуса (ESC - прервать)
+    p       - напечатать координаты всех найденных меток в консоль
+    s       - сохранить их в calib/markers_px_cam<index>.json (с размером кадра)
+    j       - тест дрожания: копит --samples кадров при неподвижной камере и
+              печатает std центров меток в px (чем меньше, тем стабильнее детекция)
+    q/ESC   - выход
+    трекбар zoom % - масштаб окна (детекция всегда по полному кадру)
+
+Фокус не сохранён - наведите камеру на метку и нажмите f
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 171, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 132, in main
+    show_scaled(win, vis, get_zoom(win))
+                          ~~~~~~~~^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'detect_markers [1]' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt\scripts> py .\detect_markers.py --camera 0
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 432 из camera_params_0.json (автофокус выключен)
+
+Живая детекция печатных меток ArUco (из scripts/make_markers.py) - 4 угла
+стола. Для каждой найденной метки: ID, к какому углу стола она относится,
+центр и 4 угла в пикселях (субпиксельно). Если видны все ожидаемые метки -
+рисуется контур стола по их центрам.
+
+Фокус: при открытии камеры выставляется сохранённый (calib/camera_params_<N>.json).
+Клавиша f - автофокус по самой метке (резкость считается в области метки,
+если её не видно - по центру кадра); результат сохраняется и подхватывается
+всеми остальными скриптами.
+
+Привязка меток к координатам станка - scripts/survey_markers.py.
+
+Запуск:
+    python scripts/detect_markers.py --camera 0
+    python scripts/detect_markers.py --camera 1 --width 1280 --height 720
+
+Управление:
+    f       - автофокус по метке и сохранение фокуса (ESC - прервать)
+    p       - напечатать координаты всех найденных меток в консоль
+    s       - сохранить их в calib/markers_px_cam<index>.json (с размером кадра)
+    j       - тест дрожания: копит --samples кадров при неподвижной камере и
+              печатает std центров меток в px (чем меньше, тем стабильнее детекция)
+    q/ESC   - выход
+    трекбар zoom % - масштаб окна (детекция всегда по полному кадру)
+
+Автофокус по метке ID3...
+Фокус 189 (резкость 1617) сохранён: C:\Users\USER\proj_pt\calib\camera_params_0.json
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 171, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\detect_markers.py", line 130, in main
+    draw_texts(vis, texts)
+    ~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 76, in draw_texts
+    draw.text((x, y), text, font=font, fill=color[::-1])
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\PIL\ImageDraw.py", line 647, in text
+    draw_text(ink)
+    ~~~~~~~~~^^^^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\PIL\ImageDraw.py", line 591, in draw_text
+    mask, offset = image_text.font.getmask2(
+                   ~~~~~~~~~~~~~~~~~~~~~~~~^
+        line.text,
+        ^^^^^^^^^^
+    ...<10 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\PIL\ImageFont.py", line 653, in getmask2
+    return self.font.render(
+           ~~~~~~~~~~~~~~~~^
+        text,
+        ^^^^^
+    ...<9 lines>...
+        start,
+        ^^^^^^
+    )
+    ^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\PIL\ImageFont.py", line 648, in fill
+    def fill(width: int, height: int) -> Image.core.ImagingCore:
+
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py --board 10mm --fisheye --camera 0
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 189 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 347, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 301, in main
+    views, size, frames_dir = capture_views(cap, args, board, cv2.aruco.CharucoDetector(board))
+                              ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 111, in capture_views
+    cv2.aruco.drawDetectedCornersCharuco(vis, det[2] / scale, det[3], (0, 255, 0))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\objdetect\src\aruco\charuco_detector.cpp:558: error: (-215:Assertion failed) (_charucoCorners.total() == _charucoIds.total()) || _charucoIds.total() == 0 in function 'cv::aruco::drawDetectedCornersCharuco'
+
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py --board 10mm --fisheye --camera 0
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 189 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 348, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 302, in main
+    views, size, frames_dir = capture_views(cap, args, board, cv2.aruco.CharucoDetector(board))
+                              ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 97, in capture_views
+    det = detect_board(detector, board, small, args.min_corners)
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 67, in detect_board
+    corners, ids, _, _ = detector.detectBoard(gray)
+                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 348, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 295, in main
+    cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
+  File "C:\Users\USER\proj_pt\common\camera.py", line 81, in open_camera
+    print(f"Камера {index}: {w}x{h} @ {fps:.1f} fps, cv2 сообщает формат={reported} "
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          f"(под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> py .\autofocus.py
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 189 из camera_params_0.json (автофокус выключен)
+
+Точная программная автофокусировка по максимуму резкости (дисперсия
+Лапласиана в центральной области кадра), алгоритм - common/focus.py
+(сетка в три стадии: шаг 32 по всему диапазону -> шаг 4 -> шаг 1).
+
+Найденный фокус СРАЗУ сохраняется в calib/camera_params_<index>.json, и все
+остальные скрипты (detect_markers, survey_markers, calibrate_distortion, ...)
+выставляют его при открытии камеры - драйвер сбрасывает фокус при каждом
+переподключении, поэтому сохранять и выставлять заново нужно обязательно.
+
+Для меток удобнее фокусироваться прямо в detect_markers.py (клавиша f) - там
+резкость считается по самой метке.
+
+Запуск:
+    python scripts/autofocus.py --camera 1
+    python scripts/autofocus.py --camera 1 --roi 150 --coarse-step 16 --samples 5
+
+Управление в окне просмотра:
+    r         - повторить автофокусировку с нуля
+    . / ,     - подвинуть фокус вручную +1 / -1
+    > / <     - подвинуть фокус вручную +10 / -10
+    s         - сохранить текущий (подвинутый вручную) фокус
+    q/ESC     - выход
+
+Автофокус по центру кадра...
+  focus=   0  sharpness=   1501.0
+  focus=  32  sharpness=   1469.7
+  focus=  64  sharpness=   1473.4
+  focus=  96  sharpness=   1895.6
+  focus= 128  sharpness=   3055.5
+  focus= 160  sharpness=   4458.7
+  focus= 192  sharpness=   4759.9
+  focus= 224  sharpness=   3510.9
+  focus= 256  sharpness=   2042.8
+  focus= 288  sharpness=   1107.1
+  focus= 320  sharpness=    628.9
+  focus= 352  sharpness=    379.7
+  focus= 384  sharpness=    239.7
+  focus= 416  sharpness=    159.1
+  focus= 448  sharpness=    108.7
+  focus= 480  sharpness=     78.0
+  focus= 512  sharpness=     57.8
+  focus= 544  sharpness=     44.9
+  focus= 576  sharpness=     37.8
+  focus= 608  sharpness=     31.5
+  focus= 640  sharpness=     26.2
+  focus= 672  sharpness=     22.5
+  focus= 704  sharpness=     20.9
+  focus= 736  sharpness=     20.0
+  focus= 768  sharpness=     19.5
+  focus= 800  sharpness=     18.9
+  focus= 832  sharpness=     18.6
+  focus= 864  sharpness=     18.5
+  focus= 896  sharpness=     18.4
+  focus= 928  sharpness=     18.6
+  focus= 960  sharpness=     18.4
+  focus= 992  sharpness=     18.5
+  focus= 160  sharpness=   4408.8
+  focus= 164  sharpness=   4622.0
+  focus= 168  sharpness=   4782.3
+  focus= 172  sharpness=   4830.0
+  focus= 176  sharpness=   4860.5
+  focus= 180  sharpness=   4875.2
+  focus= 184  sharpness=   4867.1
+  focus= 188  sharpness=   4818.1
+  focus= 192  sharpness=   4720.5
+  focus= 196  sharpness=   4604.0
+  focus= 200  sharpness=   4485.2
+  focus= 204  sharpness=   4357.1
+  focus= 208  sharpness=   4200.6
+  focus= 212  sharpness=   4041.8
+  focus= 216  sharpness=   3868.8
+  focus= 220  sharpness=   3675.1
+  focus= 224  sharpness=   3453.7
+  focus= 176  sharpness=   4865.9
+  focus= 177  sharpness=   4876.3
+  focus= 178  sharpness=   4873.7
+  focus= 179  sharpness=   4882.3
+  focus= 180  sharpness=   4886.1
+  focus= 181  sharpness=   4890.2
+  focus= 182  sharpness=   4892.0
+  focus= 183  sharpness=   4889.7
+  focus= 184  sharpness=   4887.2
+ИТОГ: focus=182  sharpness=4892.0. Сохранено: C:\Users\USER\proj_pt\calib\camera_params_0.json
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 348, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 302, in main
+    views, size, frames_dir = capture_views(cap, args, board, cv2.aruco.CharucoDetector(board))
+                              ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 97, in capture_views
+    det = detect_board(detector, board, small, args.min_corners)
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 67, in detect_board
+    corners, ids, _, _ = detector.detectBoard(gray)
+                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py --board 10mm --fisheye --camera 0 --width 1920 --height 1080
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 348, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 302, in main
+    views, size, frames_dir = capture_views(cap, args, board, cv2.aruco.CharucoDetector(board))
+                              ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 116, in capture_views
+    show_scaled(win, vis, get_zoom(win))
+                          ~~~~~~~~^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'calibrate - захват доски' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py --board 10mm --fisheye --camera 0 --width 1920 --height 1080
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 348, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 302, in main
+    views, size, frames_dir = capture_views(cap, args, board, cv2.aruco.CharucoDetector(board))
+                              ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 116, in capture_views
+    show_scaled(win, vis, get_zoom(win))
+                          ~~~~~~~~^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'calibrate - захват доски' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py --board 10mm --camera 0 --width 1920 --height 1080
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Слишком мало кадров (0), нужно хотя бы 8, лучше 15-25 с покрытием всего кадра.
+PS C:\Users\USER\proj_pt\scripts> py .\calibrate_distortion.py --board 10mm --camera 0 --width 1920 --height 1080
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+c - захватить кадр, q - закончить и калибровать, ESC - выход без калибровки
+Кадр #1: 120 углов, покрытие 43/48
+Кадр #2: 126 углов, покрытие 44/48
+Кадр #3: 123 углов, покрытие 44/48
+Кадр #4: 128 углов, покрытие 44/48
+Кадр #5: 126 углов, покрытие 44/48
+Кадр #6: 133 углов, покрытие 48/48
+Кадр #7: 129 углов, покрытие 48/48
+Кадр #8: 127 углов, покрытие 48/48
+Кадр #9: 127 углов, покрытие 48/48
+Кадр #10: 135 углов, покрытие 48/48
+Кадр #11: 112 углов, покрытие 48/48
+Кадр #12: 130 углов, покрытие 48/48
+Кадр #13: 120 углов, покрытие 48/48
+Кадр #14: 126 углов, покрытие 48/48
+Кадр #15: 122 углов, покрытие 48/48
+Кадр #16: 110 углов, покрытие 48/48
+Кадр #17: 129 углов, покрытие 48/48
+Кадр #18: 131 углов, покрытие 48/48
+Кадр #19: 126 углов, покрытие 48/48
+Кадр #20: 132 углов, покрытие 48/48
+Кадры сохранены в C:\Users\USER\proj_pt\calib\frames_cam0_1920x1080_20261019-145309
+Калибровка по 20 кадрам, модель pinhole ...
+--- Параметры камеры ---
+Режим (кадр):            1920x1080 px
+Фокусное расстояние:     fx=14821.19 px   fy=14781.70 px   (fy/fx=0.9973)
+Главная точка:           cx=938.15 px   cy=572.24 px   (центр кадра 960.0, 540.0)
+Поле зрения (FOV):       7.4° x 4.2°
+Коэффициенты дисторсии:  [-54.27275, 3099.43103, -0.00839, 0.00186, -79932.59828]
+RMS репроекции:          1.2570 px   <- высоковато, см. кадры ниже
+    кадр  1: 1.289 px
+    кадр  2: 1.310 px
+    кадр  3: 1.254 px
+    кадр  4: 1.198 px
+    кадр  5: 1.186 px
+    кадр  6: 1.495 px
+    кадр  7: 1.200 px
+    кадр  8: 1.078 px
+    кадр  9: 1.037 px
+    кадр 10: 1.393 px
+    кадр 11: 1.051 px
+    кадр 12: 1.107 px
+    кадр 13: 1.453 px
+    кадр 14: 0.898 px
+    кадр 15: 1.060 px
+    кадр 16: 0.815 px
+    кадр 17: 1.572 px
+    кадр 18: 1.179 px
+    кадр 19: 1.411 px
+    кадр 20: 1.676 px
+Калибровка сохранена: C:\Users\USER\proj_pt\calib\calib_cam0_1920x1080_pinhole.json
+Просмотр undistort: q/ESC - выход
+PS C:\Users\USER\proj_pt\scripts> py .\make_chessboard.py
+Сохранено: C:\Users\USER\proj_pt\print\chessboard_charuco_10mm.svg  (лист 180x262 мм, доски: 10mm)
+Сохранено: C:\Users\USER\proj_pt\print\charuco_small_boards.svg  (лист 100x230 мм, доски: 5mm, 3mm, 2mm)
+PS C:\Users\USER\proj_pt\scripts> py .\make_chessboard.py --
+usage: make_chessboard.py [-h] [--board {10mm,2mm,3mm,5mm}]
+make_chessboard.py: error: unrecognized arguments: --
+PS C:\Users\USER\proj_pt\scripts> py .\make_chessboard.py --board 20mm
+usage: make_chessboard.py [-h] [--board {10mm,2mm,3mm,5mm}]
+make_chessboard.py: error: argument --board: invalid choice: '20mm' (choose from '10mm', '2mm', '3mm', '5mm')
+PS C:\Users\USER\proj_pt\scripts> python scripts/calibrate_distortion.py --camera 0 --board 10mm --width 640 --height 480 --grbl COM4
+C:\Users\USER\AppData\Local\Programs\Python\Python314\python.exe: can't open file 'C:\\Users\\USER\\proj_pt\\scripts\\scripts\\calibrate_distortion.py': [Errno 2] No such file or directory
+PS C:\Users\USER\proj_pt\scripts> python calibrate_distortion.py --camera 0 --board 10mm --width 640 --height 480 --grbl COM4
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+g - авто-съёмка станком, c - кадр вручную (наклоны), q - закончить и посчитать, ESC - выход
+авто-съёмка: 25 точек в пределах +-25 мм по X и Y от текущего положения (F600), в конце возврат сюда   [y] да / [n] нет
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 585, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 523, in main
+    finished = capture.run()
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 252, in run
+    self.auto_grid()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 212, in auto_grid
+    self.grbl = Grbl(a.grbl, a.baud)
+                ~~~~^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\common\grbl.py", line 28, in __init__
+    link = serial.Serial(port, baud, timeout=0.1)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 33, in __init__
+    super(Serial, self).__init__(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialutil.py", line 244, in __init__
+    self.open()
+    ~~~~~~~~~^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 64, in open
+    raise SerialException("could not open port {!r}: {!r}".format(self.portstr, ctypes.WinError()))
+serial.serialutil.SerialException: could not open port 'COM4': PermissionError(13, 'Отказано в доступе.', None, 5)
+PS C:\Users\USER\proj_pt\scripts> python calibrate_distortion.py --camera 0 --board 10mm --width 640 --height 480 --grbl COM4
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+g - авто-съёмка станком, c - кадр вручную (наклоны), q - закончить и посчитать, ESC - выход
+авто-съёмка: 25 точек в пределах +-25 мм по X и Y от текущего положения (F600), в конце возврат сюда   [y] да / [n] нет
+Grbl 1.1f ['$' for help]; состояние Idle
+Кадр #1: 162 углов, станок X-24.70 Y-24.70, покрытие 46/48
+Кадр #2: 161 углов, станок X-12.27 Y-24.70, покрытие 46/48
+Кадр #3: 125 углов, станок X+0.15 Y-24.70, покрытие 46/48
+Кадр #4: 140 углов, станок X+12.58 Y-24.70, покрытие 46/48
+Кадр #5: 143 углов, станок X+25.00 Y-24.70, покрытие 46/48
+Кадр #6: 143 углов, станок X+25.00 Y-12.27, покрытие 46/48
+Кадр #7: 157 углов, станок X+12.58 Y-12.27, покрытие 46/48
+Кадр #8: 105 углов, станок X+0.15 Y-12.27, покрытие 46/48
+Кадр #9: 126 углов, станок X-12.27 Y-12.27, покрытие 46/48
+Кадр #10: 170 углов, станок X-24.70 Y-12.27, покрытие 46/48
+Кадр #11: 155 углов, станок X-24.70 Y+0.15, покрытие 46/48
+Кадр #12: 172 углов, станок X-12.27 Y+0.15, покрытие 46/48
+Кадр #13: 97 углов, станок X+0.15 Y+0.15, покрытие 46/48
+Кадр #14: 168 углов, станок X+12.58 Y+0.15, покрытие 46/48
+Кадр #15: 129 углов, станок X+25.00 Y+0.15, покрытие 46/48
+Кадр #16: 166 углов, станок X+25.00 Y+12.58, покрытие 46/48
+Кадр #17: 150 углов, станок X+12.58 Y+12.58, покрытие 46/48
+Кадр #18: 117 углов, станок X+0.15 Y+12.58, покрытие 46/48
+Кадр #19: 173 углов, станок X-12.27 Y+12.58, покрытие 47/48
+Кадр #20: 135 углов, станок X-24.70 Y+12.58, покрытие 47/48
+Кадр #21: 157 углов, станок X-24.70 Y+25.00, покрытие 47/48
+Кадр #22: 169 углов, станок X-12.27 Y+25.00, покрытие 47/48
+Кадр #23: 158 углов, станок X+0.15 Y+25.00, покрытие 47/48
+Кадр #24: 151 углов, станок X+12.58 Y+25.00, покрытие 47/48
+Кадр #25: 152 углов, станок X+25.00 Y+25.00, покрытие 47/48
+Сетка снята, станок вернулся в стартовую точку. Теперь наклоны вручную (c), потом q.
+Кадры сохранены в C:\Users\USER\proj_pt\calib\frames_cam0_640x480_20261019-151736
+ВНИМАНИЕ: все кадры сняты только сдвигом без наклона - фокусное расстояние так не определяется надёжно. Добавьте 8-12 кадров с наклоном доски (c).
+Калибровка по 25 кадрам, модель pinhole ...
+--- Параметры камеры ---
+Режим (кадр):            640x480 px
+Фокусное расстояние:     fx=4970.85 px   fy=4980.31 px   (fy/fx=1.0019)
+Главная точка:           cx=309.85 px   cy=249.04 px   (центр кадра 320.0, 240.0)
+Поле зрения (FOV):       7.4° x 5.5°
+Коэффициенты дисторсии:  [-56.00685, 3306.79703, -0.00395, 0.00198, -89098.19866]
+RMS репроекции:          0.2438 px
+    кадр  1: 0.229 px
+    кадр  2: 0.223 px
+    кадр  3: 0.215 px
+    кадр  4: 0.228 px
+    кадр  5: 0.224 px
+    кадр  6: 0.247 px
+    кадр  7: 0.243 px
+    кадр  8: 0.214 px
+    кадр  9: 0.226 px
+    кадр 10: 0.244 px
+    кадр 11: 0.235 px
+    кадр 12: 0.232 px
+    кадр 13: 0.214 px
+    кадр 14: 0.235 px
+    кадр 15: 0.231 px
+    кадр 16: 0.246 px
+    кадр 17: 0.244 px
+    кадр 18: 0.236 px
+    кадр 19: 0.254 px
+    кадр 20: 0.235 px
+    кадр 21: 0.286 px
+    кадр 22: 0.269 px
+    кадр 23: 0.264 px
+    кадр 24: 0.285 px
+    кадр 25: 0.279 px
+!!! КАЛИБРОВКА НЕДОСТОВЕРНА - не использовать:
+    - поле зрения по fx 7.4° - неправдоподобно
+    - коэффициенты дисторсии огромные - модель не сошлась
+    - фокусное не определяется кадрами: из другого начального значения выходит 5104, 19693 вместо 4971 px - нужны кадры с наклоном доски 10-25° в разные стороны
+Калибровка сохранена: C:\Users\USER\proj_pt\calib\calib_cam0_640x480_pinhole_unreliable.json
+Просмотр undistort: q/ESC - выход. Прямые края справа должны стать прямыми и у краёв кадра.
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 585, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 579, in main
+    live_undistort(cap, K, D, size, model)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 446, in live_undistort
+    show_scaled(win, np.hstack([frame, cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)]), get_zoom(win))
+                                                                                         ~~~~~~~~^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'undistort (слева оригинал, справа исправленный)' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt\scripts> python calibrate_distortion.py --camera 0 --board 10mm --width 1920 --height 1080 --grbl COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 585, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 521, in main
+    capture = Capture(cap, args, board, cv2.aruco.CharucoDetector(board))
+  File "C:\Users\USER\proj_pt\scripts\calibrate_distortion.py", line 109, in __init__
+    cv2.namedWindow(self.win, cv2.WINDOW_NORMAL)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> ^C
+PS C:\Users\USER\proj_pt\scripts> py .\autofocus.py
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 182 из camera_params_0.json (автофокус выключен)
+
+Точная программная автофокусировка по максимуму резкости (дисперсия
+Лапласиана в центральной области кадра), алгоритм - common/focus.py
+(сетка в три стадии: шаг 32 по всему диапазону -> шаг 4 -> шаг 1).
+
+Найденный фокус СРАЗУ сохраняется в calib/camera_params_<index>.json, и все
+остальные скрипты (detect_markers, survey_markers, calibrate_distortion, ...)
+выставляют его при открытии камеры - драйвер сбрасывает фокус при каждом
+переподключении, поэтому сохранять и выставлять заново нужно обязательно.
+
+Для меток удобнее фокусироваться прямо в detect_markers.py (клавиша f) - там
+резкость считается по самой метке.
+
+Запуск:
+    python scripts/autofocus.py --camera 1
+    python scripts/autofocus.py --camera 1 --roi 150 --coarse-step 16 --samples 5
+
+Управление в окне просмотра:
+    r         - повторить автофокусировку с нуля
+    . / ,     - подвинуть фокус вручную +1 / -1
+    > / <     - подвинуть фокус вручную +10 / -10
+    s         - сохранить текущий (подвинутый вручную) фокус
+    q/ESC     - выход
+
+Автофокус по центру кадра...
+  focus=   0  sharpness=   1327.0
+  focus=  32  sharpness=   1327.3
+  focus=  64  sharpness=   1334.5
+  focus=  96  sharpness=   1737.5
+  focus= 128  sharpness=   3021.5
+  focus= 160  sharpness=   4438.5
+  focus= 192  sharpness=   4900.2
+  focus= 224  sharpness=   3657.5
+  focus= 256  sharpness=   2109.7
+  focus= 288  sharpness=   1152.5
+  focus= 320  sharpness=    669.9
+  focus= 352  sharpness=    424.7
+  focus= 384  sharpness=    267.1
+  focus= 416  sharpness=    175.7
+  focus= 448  sharpness=    120.8
+  focus= 480  sharpness=     93.7
+  focus= 512  sharpness=     71.3
+  focus= 544  sharpness=     57.3
+  focus= 576  sharpness=     44.8
+  focus= 608  sharpness=     37.1
+  focus= 640  sharpness=     31.6
+  focus= 672  sharpness=     26.8
+  focus= 704  sharpness=     24.7
+  focus= 736  sharpness=     23.8
+  focus= 768  sharpness=     22.7
+  focus= 800  sharpness=     22.4
+  focus= 832  sharpness=     21.9
+  focus= 864  sharpness=     22.0
+  focus= 896  sharpness=     21.8
+  focus= 928  sharpness=     21.9
+  focus= 960  sharpness=     21.8
+  focus= 992  sharpness=     21.7
+  focus= 160  sharpness=   4546.5
+  focus= 164  sharpness=   4782.9
+  focus= 168  sharpness=   4837.8
+  focus= 172  sharpness=   4946.2
+  focus= 176  sharpness=   5000.8
+  focus= 180  sharpness=   5006.7
+  focus= 184  sharpness=   4970.6
+  focus= 188  sharpness=   4909.3
+  focus= 192  sharpness=   4827.1
+  focus= 196  sharpness=   4732.5
+  focus= 200  sharpness=   4615.4
+  focus= 204  sharpness=   4490.4
+  focus= 208  sharpness=   4322.0
+  focus= 212  sharpness=   4120.9
+  focus= 216  sharpness=   3901.8
+  focus= 220  sharpness=   3696.2
+  focus= 224  sharpness=   3490.3
+  focus= 176  sharpness=   4983.6
+  focus= 177  sharpness=   4988.9
+  focus= 178  sharpness=   4994.2
+  focus= 179  sharpness=   4998.9
+  focus= 180  sharpness=   4999.8
+  focus= 181  sharpness=   4998.2
+  focus= 182  sharpness=   4993.4
+  focus= 183  sharpness=   4985.0
+  focus= 184  sharpness=   4973.2
+ИТОГ: focus=180  sharpness=4999.8. Сохранено: C:\Users\USER\proj_pt\calib\camera_params_0.json
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\autofocus.py", line 125, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\autofocus.py", line 96, in main
+    frame = read_frame(cap)
+  File "C:\Users\USER\proj_pt\common\camera.py", line 92, in read_frame
+    ok, frame = cap.read()
+                ~~~~~~~~^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> python calibrate_distortion.py --camera 0 --board 10mm --width 1920 --height 1080 --grbl COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 180 из camera_params_0.json (автофокус выключен)
+g - авто-съёмка станком, c - кадр вручную (наклоны), q - закончить и посчитать, ESC - выход
+авто-съёмка: 25 точек в пределах +-25 мм по X и Y от текущего положения (F600), в конце возврат сюда   [y] да / [n] нет
+Grbl 1.1f ['$' for help]; состояние Idle
+Кадр #1: 108 углов, станок X-24.70 Y-24.70, покрытие 45/48
+Кадр #2: 112 углов, станок X-12.27 Y-24.70, покрытие 47/48
+Кадр #3: 109 углов, станок X+0.15 Y-24.70, покрытие 47/48
+Кадр #4: 121 углов, станок X+12.58 Y-24.70, покрытие 47/48
+Кадр #5: 125 углов, станок X+25.00 Y-24.70, покрытие 48/48
+Кадр #6: 118 углов, станок X+25.00 Y-12.27, покрытие 48/48
+Кадр #7: 117 углов, станок X+12.58 Y-12.27, покрытие 48/48
+Кадр #8: 105 углов, станок X+0.15 Y-12.27, покрытие 48/48
+Кадр #9: 117 углов, станок X-12.27 Y-12.27, покрытие 48/48
+Кадр #10: 110 углов, станок X-24.70 Y-12.27, покрытие 48/48
+Кадр #11: 104 углов, станок X-24.70 Y+0.15, покрытие 48/48
+Кадр #12: 110 углов, станок X-12.27 Y+0.15, покрытие 48/48
+Кадр #13: 110 углов, станок X+0.15 Y+0.15, покрытие 48/48
+Кадр #14: 123 углов, станок X+12.58 Y+0.15, покрытие 48/48
+Кадр #15: 117 углов, станок X+25.00 Y+0.15, покрытие 48/48
+Кадр #16: 110 углов, станок X+25.00 Y+12.58, покрытие 48/48
+Кадр #17: 128 углов, станок X+12.58 Y+12.58, покрытие 48/48
+Кадр #18: 103 углов, станок X+0.15 Y+12.58, покрытие 48/48
+Кадр #19: 104 углов, станок X-12.27 Y+12.58, покрытие 48/48
+Кадр #20: 97 углов, станок X-24.70 Y+12.58, покрытие 48/48
+Кадр #21: 114 углов, станок X-24.70 Y+25.00, покрытие 48/48
+Кадр #22: 117 углов, станок X-12.27 Y+25.00, покрытие 48/48
+Кадр #23: 107 углов, станок X+0.15 Y+25.00, покрытие 48/48
+Кадр #24: 121 углов, станок X+12.58 Y+25.00, покрытие 48/48
+Кадр #25: 118 углов, станок X+25.00 Y+25.00, покрытие 48/48
+Сетка снята, станок вернулся в стартовую точку. Теперь наклоны вручную (c), потом q.
+Кадры сохранены в C:\Users\USER\proj_pt\calib\frames_cam0_1920x1080_20261019-152118
+ВНИМАНИЕ: все кадры сняты только сдвигом без наклона - фокусное расстояние так не определяется надёжно. Добавьте 8-12 кадров с наклоном доски (c).
+Калибровка по 25 кадрам, модель pinhole ...
+--- Параметры камеры ---
+Режим (кадр):            1920x1080 px
+Фокусное расстояние:     fx=12533.95 px   fy=12539.14 px   (fy/fx=1.0004)
+Главная точка:           cx=938.17 px   cy=569.62 px   (центр кадра 960.0, 540.0)
+Поле зрения (FOV):       8.8° x 4.9°
+Коэффициенты дисторсии:  [-38.90904, 1589.25288, -0.00373, -0.00094, -29641.45517]
+RMS репроекции:          0.5646 px   <- высоковато, см. кадры ниже
+    кадр  1: 0.612 px
+    кадр  2: 0.533 px
+    кадр  3: 0.521 px
+    кадр  4: 0.536 px
+    кадр  5: 0.532 px
+    кадр  6: 0.540 px
+    кадр  7: 0.501 px
+    кадр  8: 0.502 px
+    кадр  9: 0.550 px
+    кадр 10: 0.572 px
+    кадр 11: 0.607 px
+    кадр 12: 0.565 px
+    кадр 13: 0.543 px
+    кадр 14: 0.556 px
+    кадр 15: 0.595 px
+    кадр 16: 0.533 px
+    кадр 17: 0.581 px
+    кадр 18: 0.551 px
+    кадр 19: 0.589 px
+    кадр 20: 0.663 px
+    кадр 21: 0.612 px
+    кадр 22: 0.577 px
+    кадр 23: 0.579 px
+    кадр 24: 0.587 px
+    кадр 25: 0.567 px
+!!! КАЛИБРОВКА НЕДОСТОВЕРНА - не использовать:
+    - поле зрения по fx 8.8° - неправдоподобно
+    - коэффициенты дисторсии огромные - модель не сошлась
+    - фокусное не определяется кадрами: из другого начального значения выходит 12527, 19234 вместо 12534 px - нужны кадры с наклоном доски 10-25° в разные стороны
+Калибровка сохранена: C:\Users\USER\proj_pt\calib\calib_cam0_1920x1080_pinhole_unreliable.json
+Просмотр undistort: q/ESC - выход. Прямые края справа должны стать прямыми и у краёв кадра.
+PS C:\Users\USER\proj_pt\scripts> .\autofocus.py
+PS C:\Users\USER\proj_pt\scripts>
+                                  ^C
+PS C:\Users\USER\proj_pt\scripts> ^C
+PS C:\Users\USER\proj_pt\scripts> py .\autofocus.py
+Камера 0: 640x480 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 180 из camera_params_0.json (автофокус выключен)
+
+Точная программная автофокусировка по максимуму резкости (дисперсия
+Лапласиана в центральной области кадра), алгоритм - common/focus.py
+(сетка в три стадии: шаг 32 по всему диапазону -> шаг 4 -> шаг 1).
+
+Найденный фокус СРАЗУ сохраняется в calib/camera_params_<index>.json, и все
+остальные скрипты (detect_markers, survey_markers, calibrate_distortion, ...)
+выставляют его при открытии камеры - драйвер сбрасывает фокус при каждом
+переподключении, поэтому сохранять и выставлять заново нужно обязательно.
+
+Для меток удобнее фокусироваться прямо в detect_markers.py (клавиша f) - там
+резкость считается по самой метке.
+
+Запуск:
+    python scripts/autofocus.py --camera 1
+    python scripts/autofocus.py --camera 1 --roi 150 --coarse-step 16 --samples 5
+
+Управление в окне просмотра:
+    r         - повторить автофокусировку с нуля
+    . / ,     - подвинуть фокус вручную +1 / -1
+    > / <     - подвинуть фокус вручную +10 / -10
+    s         - сохранить текущий (подвинутый вручную) фокус
+    q/ESC     - выход
+
+Автофокус по центру кадра...
+  focus=   0  sharpness=    938.4
+  focus=  32  sharpness=    945.3
+  focus=  64  sharpness=    951.0
+  focus=  96  sharpness=   1208.6
+  focus= 128  sharpness=   1968.1
+  focus= 160  sharpness=   3191.8
+  focus= 192  sharpness=   4003.5
+  focus= 224  sharpness=   3694.6
+  focus= 256  sharpness=   2477.2
+  focus= 288  sharpness=   1373.1
+  focus= 320  sharpness=    804.6
+  focus= 352  sharpness=    501.9
+  focus= 384  sharpness=    323.9
+  focus= 416  sharpness=    210.3
+  focus= 448  sharpness=    142.5
+  focus= 480  sharpness=    103.6
+  focus= 512  sharpness=     78.6
+  focus= 544  sharpness=     60.5
+  focus= 576  sharpness=     48.2
+  focus= 608  sharpness=     38.6
+  focus= 640  sharpness=     31.8
+  focus= 672  sharpness=     27.8
+  focus= 704  sharpness=     25.6
+  focus= 736  sharpness=     24.1
+  focus= 768  sharpness=     23.4
+  focus= 800  sharpness=     22.8
+  focus= 832  sharpness=     22.4
+  focus= 864  sharpness=     22.2
+  focus= 896  sharpness=     21.8
+  focus= 928  sharpness=     22.2
+  focus= 960  sharpness=     23.7
+  focus= 992  sharpness=     23.8
+  focus= 160  sharpness=   3298.7
+  focus= 164  sharpness=   3494.3
+  focus= 168  sharpness=   3593.8
+  focus= 172  sharpness=   3764.6
+  focus= 176  sharpness=   3844.9
+  focus= 180  sharpness=   3895.7
+  focus= 184  sharpness=   3951.0
+  focus= 188  sharpness=   4012.2
+  focus= 192  sharpness=   4051.5
+  focus= 196  sharpness=   4075.6
+  focus= 200  sharpness=   4058.5
+  focus= 204  sharpness=   4013.7
+  focus= 208  sharpness=   3952.3
+  focus= 212  sharpness=   3883.9
+  focus= 216  sharpness=   3805.1
+  focus= 220  sharpness=   3726.1
+  focus= 224  sharpness=   3620.9
+  focus= 192  sharpness=   4061.7
+  focus= 193  sharpness=   4068.6
+  focus= 194  sharpness=   4078.2
+  focus= 195  sharpness=   4084.4
+  focus= 196  sharpness=   4089.8
+  focus= 197  sharpness=   4090.9
+  focus= 198  sharpness=   4088.7
+  focus= 199  sharpness=   4086.2
+  focus= 200  sharpness=   4079.6
+ИТОГ: focus=197  sharpness=4090.9. Сохранено: C:\Users\USER\proj_pt\calib\camera_params_0.json
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\autofocus.py", line 125, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\autofocus.py", line 96, in main
+    frame = read_frame(cap)
+  File "C:\Users\USER\proj_pt\common\camera.py", line 92, in read_frame
+    ok, frame = cap.read()
+                ~~~~~~~~^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt\scripts> python calibrate_distortion.py --camera 0 --board 10mm --width 1920 --height 1080 --grbl COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+g - авто-съёмка станком, c - кадр вручную (наклоны), q - закончить и посчитать, ESC - выход
+авто-съёмка: 25 точек в пределах +-25 мм по X и Y от текущего положения (F600), в конце возврат сюда   [y] да / [n] нет
+Grbl 1.1f ['$' for help]; состояние Idle
+Кадр #1: 86 углов, станок X-24.70 Y-24.70, покрытие 43/48
+Кадр #2: 85 углов, станок X-12.27 Y-24.70, покрытие 46/48
+Кадр #3: 77 углов, станок X+0.15 Y-24.70, покрытие 47/48
+Кадр #4: 97 углов, станок X+12.58 Y-24.70, покрытие 47/48
+Кадр #5: 85 углов, станок X+25.00 Y-24.70, покрытие 47/48
+Кадр #6: 95 углов, станок X+25.00 Y-12.27, покрытие 48/48
+Кадр #7: 91 углов, станок X+12.58 Y-12.27, покрытие 48/48
+Кадр #8: 80 углов, станок X+0.15 Y-12.27, покрытие 48/48
+Кадр #9: 73 углов, станок X-12.27 Y-12.27, покрытие 48/48
+Кадр #10: 79 углов, станок X-24.70 Y-12.27, покрытие 48/48
+Кадр #11: 81 углов, станок X-24.70 Y+0.15, покрытие 48/48
+Кадр #12: 82 углов, станок X-12.27 Y+0.15, покрытие 48/48
+Кадр #13: 73 углов, станок X+0.15 Y+0.15, покрытие 48/48
+Кадр #14: 89 углов, станок X+12.58 Y+0.15, покрытие 48/48
+Кадр #15: 83 углов, станок X+25.00 Y+0.15, покрытие 48/48
+Кадр #16: 81 углов, станок X+25.00 Y+12.58, покрытие 48/48
+Кадр #17: 79 углов, станок X+12.58 Y+12.58, покрытие 48/48
+Кадр #18: 75 углов, станок X+0.15 Y+12.58, покрытие 48/48
+Кадр #19: 85 углов, станок X-12.27 Y+12.58, покрытие 48/48
+Кадр #20: 77 углов, станок X-24.70 Y+12.58, покрытие 48/48
+Кадр #21: 72 углов, станок X-24.70 Y+25.00, покрытие 48/48
+Кадр #22: 86 углов, станок X-12.27 Y+25.00, покрытие 48/48
+Кадр #23: 73 углов, станок X+0.15 Y+25.00, покрытие 48/48
+Кадр #24: 91 углов, станок X+12.58 Y+25.00, покрытие 48/48
+Кадр #25: 89 углов, станок X+25.00 Y+25.00, покрытие 48/48
+Сетка снята, станок вернулся в стартовую точку. Теперь наклоны вручную (c), потом q.
+Кадр #26: 88 углов, покрытие 48/48
+Кадр #27: 85 углов, покрытие 48/48
+Кадр #28: 78 углов, покрытие 48/48
+Кадр #29: 52 углов, покрытие 48/48
+Кадр #30: 87 углов, покрытие 48/48
+Кадр #31: 86 углов, покрытие 48/48
+Кадр #32: 73 углов, покрытие 48/48
+Кадр #33: 45 углов, покрытие 48/48
+Кадр #34: 55 углов, покрытие 48/48
+Кадр #35: 52 углов, покрытие 48/48
+Кадр #36: 53 углов, покрытие 48/48
+Кадр #37: 51 углов, покрытие 48/48
+Кадр #38: 73 углов, покрытие 48/48
+Кадр #39: 48 углов, покрытие 48/48
+Кадр #40: 44 углов, покрытие 48/48
+Кадры сохранены в C:\Users\USER\proj_pt\calib\frames_cam0_1920x1080_20261019-153432
+Калибровка по 40 кадрам, модель pinhole ...
+--- Параметры камеры ---
+Режим (кадр):            1920x1080 px
+Фокусное расстояние:     fx=1101.93 px   fy=1100.45 px   (fy/fx=0.9987)
+Главная точка:           cx=938.45 px   cy=568.11 px   (центр кадра 960.0, 540.0)
+Поле зрения (FOV):       82.1° x 52.3°
+Коэффициенты дисторсии:  [-0.29761, 0.09217, -0.0002, 0.00015, -0.01277]
+RMS репроекции:          0.6693 px   <- высоковато, см. кадры ниже
+    кадр  1: 0.642 px
+    кадр  2: 0.664 px
+    кадр  3: 0.654 px
+    кадр  4: 0.619 px
+    кадр  5: 0.631 px
+    кадр  6: 0.636 px
+    кадр  7: 0.594 px
+    кадр  8: 0.658 px
+    кадр  9: 0.643 px
+    кадр 10: 0.679 px
+    кадр 11: 0.723 px
+    кадр 12: 0.659 px
+    кадр 13: 0.602 px
+    кадр 14: 0.632 px
+    кадр 15: 0.636 px
+    кадр 16: 0.694 px
+    кадр 17: 0.683 px
+    кадр 18: 0.681 px
+    кадр 19: 0.725 px
+    кадр 20: 0.749 px
+    кадр 21: 0.741 px
+    кадр 22: 0.732 px
+    кадр 23: 0.757 px
+    кадр 24: 0.679 px
+    кадр 25: 0.751 px
+    кадр 26: 0.604 px
+    кадр 27: 0.600 px
+    кадр 28: 0.631 px
+    кадр 29: 0.672 px
+    кадр 30: 0.615 px
+    кадр 31: 0.621 px
+    кадр 32: 0.669 px
+    кадр 33: 0.801 px
+    кадр 34: 0.619 px
+    кадр 35: 0.621 px
+    кадр 36: 0.623 px
+    кадр 37: 0.653 px
+    кадр 38: 0.687 px
+    кадр 39: 0.766 px
+    кадр 40: 0.791 px
+--- сверка со станком (кадры сетки, доска как эталон длины) ---
+Кадров: 25, камера над доской на ~70.2 мм
+Ход X: станок проходит 99.35% заказанного  -> $100 правильное = текущее / 0.9935
+Ход Y: станок проходит 99.48% заказанного  -> $101 правильное = текущее / 0.9948
+Угол между осями X и Y станка: 89.985° (90 = перпендикулярны)
+Доска повёрнута относительно оси X станка на +89.29°
+Невязка позиционирования: 0.0157 мм (люфт/микрошаг станка + шум калибровки)
+    (размер клетки доски сверьте линейкой: 10 клеток = 50 мм; печать неточна - и эти % тоже)
+Проверка достоверности: пройдена (фокусное устойчиво к начальному приближению)
+Калибровка сохранена: C:\Users\USER\proj_pt\calib\calib_cam0_1920x1080_pinhole.json
+Просмотр undistort: q/ESC - выход. Прямые края справа должны стать прямыми и у краёв кадра.
+PS C:\Users\USER\proj_pt\scripts>  cd ..
+PS C:\Users\USER\proj_pt> python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+калибровка камеры: calib_cam0_1920x1080_pinhole.json (pinhole, RMS 0.67 px) - углы меток без дисторсии, цель - главная точка (938.5, 568.1)
+
+Привязка 4 меток углов стола к координатам GRBL-станка: точное наведение камеры
+на каждую метку, рамка стола ("виртуальная плоскость") и домашняя точка.
+
+Калибровка камеры (calibrate_distortion.py) подхватывается сама по камере и
+режиму (--width/--height): углы меток исправляются от дисторсии, цель наведения -
+главная точка объектива (там дисторсии нет), реальные мм считаются по ходу
+станка, измеренному по доске при калибровке. Режим и фокус - те же, что при
+калибровке.
+
+Безопасность: автоматические ходы едут только туда, где станок уже был, или по
+направлению, которое вы сами указали (и не дальше --span + половина окна поиска).
+Перед каждым переездом - пробный ход 2 мм: если картинка сдвинулась не так, как
+предсказывает отладка осей, длинный ход не начинается. ESC - мгновенная остановка.
+
+Порядок работы:
+  1. Камера на любой угловой метке, f - автофокус (если фокус ещё не тот).
+  2. c - подключение (--port COM4); k - отладка осей (+2 +2 -2 -2 мм по X и Y:
+     направления, масштаб, люфт). i - инвертировать ось в GRBL ($3), если нужно.
+  3. r - обход по направлениям:
+       - наведение на метку под камерой;
+       - "куда следующая метка?" - w/a/s/d (как ручной jog: +Y/-X/-Y/+X станка);
+         станок едет на --span-x / --span-y в эту сторону, ищет в окне
+         --search-window и наводится на ту метку, которую найдёт (ID любой);
+       - второе направление (поперёк первого) - так же;
+       - четвёртая метка - достраиванием прямоугольника, сам;
+       - возврат на первую (ошибка замыкания) и рамка стола в calib/table_frame.json.
+     Если раскладка уже известна (прошлая сессия или показанные метки) - r объезжает
+     все метки сам, без вопросов.
+  4. m - навестись на метку в кадре и записать её (можно показать метки вручную:
+     jog 3 + wasd к каждой и m). h - к домашней метке (ID0) и наведение;
+     z - ноль G54 там (G10 L20 P1 X0 Y0).
+
+Следующие сессии: раскладка из calib/table_frame.json подхватывается сама (если
+$3/$100/$101 не менялись) - достаточно c, k, r.
+
+Ручной jog: a/d - X-/X+, w/s - Y+/Y-, 1/2/3 - шаг 0.1/1/10 мм (без ограничений -
+следите за краями). q - выход.
+
+Запуск (режим как при калибровке):
+    python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+
+подключение к GRBL COM4 @ 115200...
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 895, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 882, in main
+    actions[key]()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 414, in connect
+    self.grbl = self.grbl_factory()
+                ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 137, in <lambda>
+    self.grbl_factory = grbl_factory or (lambda: Grbl(args.port, args.baud))
+                                                 ~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\common\grbl.py", line 28, in __init__
+    link = serial.Serial(port, baud, timeout=0.1)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 33, in __init__
+    super(Serial, self).__init__(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialutil.py", line 244, in __init__
+    self.open()
+    ~~~~~~~~~^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 64, in open
+    raise SerialException("could not open port {!r}: {!r}".format(self.portstr, ctypes.WinError()))
+serial.serialutil.SerialException: could not open port 'COM4': PermissionError(13, 'Отказано в доступе.', None, 5)
+PS C:\Users\USER\proj_pt> python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+калибровка камеры: calib_cam0_1920x1080_pinhole.json (pinhole, RMS 0.67 px) - углы меток без дисторсии, цель - главная точка (938.5, 568.1)
+
+Привязка 4 меток углов стола к координатам GRBL-станка: точное наведение камеры
+на каждую метку, рамка стола ("виртуальная плоскость") и домашняя точка.
+
+Калибровка камеры (calibrate_distortion.py) подхватывается сама по камере и
+режиму (--width/--height): углы меток исправляются от дисторсии, цель наведения -
+главная точка объектива (там дисторсии нет), реальные мм считаются по ходу
+станка, измеренному по доске при калибровке. Режим и фокус - те же, что при
+калибровке.
+
+Безопасность: автоматические ходы едут только туда, где станок уже был, или по
+направлению, которое вы сами указали (и не дальше --span + половина окна поиска).
+Перед каждым переездом - пробный ход 2 мм: если картинка сдвинулась не так, как
+предсказывает отладка осей, длинный ход не начинается. ESC - мгновенная остановка.
+
+Порядок работы:
+  1. Камера на любой угловой метке, f - автофокус (если фокус ещё не тот).
+  2. c - подключение (--port COM4); k - отладка осей (+2 +2 -2 -2 мм по X и Y:
+     направления, масштаб, люфт). i - инвертировать ось в GRBL ($3), если нужно.
+  3. r - обход по направлениям:
+       - наведение на метку под камерой;
+       - "куда следующая метка?" - w/a/s/d (как ручной jog: +Y/-X/-Y/+X станка);
+         станок едет на --span-x / --span-y в эту сторону, ищет в окне
+         --search-window и наводится на ту метку, которую найдёт (ID любой);
+       - второе направление (поперёк первого) - так же;
+       - четвёртая метка - достраиванием прямоугольника, сам;
+       - возврат на первую (ошибка замыкания) и рамка стола в calib/table_frame.json.
+     Если раскладка уже известна (прошлая сессия или показанные метки) - r объезжает
+     все метки сам, без вопросов.
+  4. m - навестись на метку в кадре и записать её (можно показать метки вручную:
+     jog 3 + wasd к каждой и m). h - к домашней метке (ID0) и наведение;
+     z - ноль G54 там (G10 L20 P1 X0 Y0).
+
+Следующие сессии: раскладка из calib/table_frame.json подхватывается сама (если
+$3/$100/$101 не менялись) - достаточно c, k, r.
+
+Ручной jog: a/d - X-/X+, w/s - Y+/Y-, 1/2/3 - шаг 0.1/1/10 мм (без ограничений -
+следите за краями). q - выход.
+
+Запуск (режим как при калибровке):
+    python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+13.74, +0.05) px = 13.74 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.06, -13.92) px = 13.92 px/мм
+По размеру метки 15 мм: 13.89 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 89.95° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.35%, Y 99.48% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 98.9%, Y 100.2%
+Люфт X: 0.027 мм (недоход на развороте)
+Люфт Y: 0.017 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.10 мм)
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+13.71, +0.03) px = 13.71 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.05, -13.92) px = 13.92 px/мм
+По размеру метки 15 мм: 13.88 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 89.92° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.35%, Y 99.48% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 98.8%, Y 100.3%
+Люфт X: 0.025 мм (недоход на развороте)
+Люфт Y: 0.001 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.10 мм)
+ID3 наведена: X-0.106 Y0.016 (остаток 0.018 мм)
+ID3 записана; записаны: ID3
+куда от ID3 ближайшая соседняя метка?   w/a/s/d = +Y/-X/-Y/+X станка (как ручной jog), ESC - отмена
+от ID3: X +269.75 мм (~268 мм реально), затем поиск шагами 62.5 мм до 300 - новая зона, по вашему направлению   [y] да / [n] нет
+Прервано (Ctrl+C)
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 895, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 890, in main
+    cap.release()
+    ~~~~~~~~~~~^^
+KeyboardInterrupt
+PS C:\Users\USER\proj_pt> ^C
+PS C:\Users\USER\proj_pt> ^C
+PS C:\Users\USER\proj_pt> ^C
+PS C:\Users\USER\proj_pt> ^C
+PS C:\Users\USER\proj_pt> ^C
+PS C:\Users\USER\proj_pt> python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+калибровка камеры: calib_cam0_1920x1080_pinhole.json (pinhole, RMS 0.67 px) - углы меток без дисторсии, цель - главная точка (938.5, 568.1)
+
+Привязка 4 меток углов стола к координатам GRBL-станка: точное наведение камеры
+на каждую метку, рамка стола ("виртуальная плоскость") и домашняя точка.
+
+Калибровка камеры (calibrate_distortion.py) подхватывается сама по камере и
+режиму (--width/--height): углы меток исправляются от дисторсии, цель наведения -
+главная точка объектива (там дисторсии нет), реальные мм считаются по ходу
+станка, измеренному по доске при калибровке. Режим и фокус - те же, что при
+калибровке.
+
+Безопасность: автоматические ходы едут только туда, где станок уже был, или по
+направлению, которое вы сами указали (и не дальше --span + половина окна поиска).
+Перед каждым переездом - пробный ход 2 мм: если картинка сдвинулась не так, как
+предсказывает отладка осей, длинный ход не начинается. ESC - мгновенная остановка.
+
+Порядок работы:
+  1. Камера на любой угловой метке, f - автофокус (если фокус ещё не тот).
+  2. c - подключение (--port COM4); k - отладка осей (+2 +2 -2 -2 мм по X и Y:
+     направления, масштаб, люфт). i - инвертировать ось в GRBL ($3), если нужно.
+  3. r - обход по направлениям:
+       - наведение на метку под камерой;
+       - "куда следующая метка?" - w/a/s/d (как ручной jog: +Y/-X/-Y/+X станка);
+         станок едет на --span-x / --span-y в эту сторону, ищет в окне
+         --search-window и наводится на ту метку, которую найдёт (ID любой);
+       - второе направление (поперёк первого) - так же;
+       - четвёртая метка - достраиванием прямоугольника, сам;
+       - возврат на первую (ошибка замыкания) и рамка стола в calib/table_frame.json.
+     Если раскладка уже известна (прошлая сессия или показанные метки) - r объезжает
+     все метки сам, без вопросов.
+  4. m - навестись на метку в кадре и записать её (можно показать метки вручную:
+     jog 3 + wasd к каждой и m). h - к домашней метке (ID0) и наведение;
+     z - ноль G54 там (G10 L20 P1 X0 Y0).
+
+Следующие сессии: раскладка из calib/table_frame.json подхватывается сама (если
+$3/$100/$101 не менялись) - достаточно c, k, r.
+
+Ручной jog: a/d - X-/X+, w/s - Y+/Y-, 1/2/3 - шаг 0.1/1/10 мм (без ограничений -
+следите за краями). q - выход.
+
+Запуск (режим как при калибровке):
+    python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+PS C:\Users\USER\proj_pt> python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+калибровка камеры: calib_cam0_1920x1080_pinhole.json (pinhole, RMS 0.67 px) - углы меток без дисторсии, цель - главная точка (938.5, 568.1)
+
+Привязка 4 меток углов стола к координатам GRBL-станка: точное наведение камеры
+на каждую метку, рамка стола ("виртуальная плоскость") и домашняя точка.
+
+Калибровка камеры (calibrate_distortion.py) подхватывается сама по камере и
+режиму (--width/--height): углы меток исправляются от дисторсии, цель наведения -
+главная точка объектива (там дисторсии нет), реальные мм считаются по ходу
+станка, измеренному по доске при калибровке. Режим и фокус - те же, что при
+калибровке.
+
+Безопасность: автоматические ходы едут только туда, где станок уже был, или по
+направлению, которое вы сами указали (и не дальше --span + половина окна поиска).
+Перед каждым переездом - пробный ход 2 мм: если картинка сдвинулась не так, как
+предсказывает отладка осей, длинный ход не начинается. ESC - мгновенная остановка.
+
+Порядок работы:
+  1. Камера на любой угловой метке, f - автофокус (если фокус ещё не тот).
+  2. c - подключение (--port COM4); k - отладка осей (+2 +2 -2 -2 мм по X и Y:
+     направления, масштаб, люфт). i - инвертировать ось в GRBL ($3), если нужно.
+  3. r - обход по направлениям:
+       - наведение на метку под камерой;
+       - "куда следующая метка?" - w/a/s/d (как ручной jog: +Y/-X/-Y/+X станка);
+         станок едет на --span-x / --span-y в эту сторону, ищет в окне
+         --search-window и наводится на ту метку, которую найдёт (ID любой);
+       - второе направление (поперёк первого) - так же;
+       - четвёртая метка - достраиванием прямоугольника, сам;
+       - возврат на первую (ошибка замыкания) и рамка стола в calib/table_frame.json.
+     Если раскладка уже известна (прошлая сессия или показанные метки) - r объезжает
+     все метки сам, без вопросов.
+  4. m - навестись на метку в кадре и записать её (можно показать метки вручную:
+     jog 3 + wasd к каждой и m). h - к домашней метке (ID0) и наведение;
+     z - ноль G54 там (G10 L20 P1 X0 Y0).
+
+Следующие сессии: раскладка из calib/table_frame.json подхватывается сама (если
+$3/$100/$101 не менялись) - достаточно c, k, r.
+
+Ручной jog: a/d - X-/X+, w/s - Y+/Y-, 1/2/3 - шаг 0.1/1/10 мм (без ограничений -
+следите за краями). q - выход.
+
+Запуск (режим как при калибровке):
+    python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+PS C:\Users\USER\proj_pt> python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 92
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+калибровка камеры: calib_cam0_1920x1080_pinhole.json (pinhole, RMS 0.67 px) - углы меток без дисторсии, цель - главная точка (938.5, 568.1)
+
+Привязка 4 меток углов стола к координатам GRBL-станка: точное наведение камеры
+на каждую метку, рамка стола ("виртуальная плоскость") и домашняя точка.
+
+Калибровка камеры (calibrate_distortion.py) подхватывается сама по камере и
+режиму (--width/--height): углы меток исправляются от дисторсии, цель наведения -
+главная точка объектива (там дисторсии нет), реальные мм считаются по ходу
+станка, измеренному по доске при калибровке. Режим и фокус - те же, что при
+калибровке.
+
+Безопасность: автоматические ходы едут только туда, где станок уже был, или по
+направлению, которое вы сами указали (и не дальше --span + половина окна поиска).
+Перед каждым переездом - пробный ход 2 мм: если картинка сдвинулась не так, как
+предсказывает отладка осей, длинный ход не начинается. ESC - мгновенная остановка.
+
+Порядок работы:
+  1. Камера на любой угловой метке, f - автофокус (если фокус ещё не тот).
+  2. c - подключение (--port COM4); k - отладка осей (+2 +2 -2 -2 мм по X и Y:
+     направления, масштаб, люфт). i - инвертировать ось в GRBL ($3), если нужно.
+  3. r - обход по направлениям:
+       - наведение на метку под камерой;
+       - "куда следующая метка?" - w/a/s/d (как ручной jog: +Y/-X/-Y/+X станка);
+         станок едет на --span-x / --span-y в эту сторону, ищет в окне
+         --search-window и наводится на ту метку, которую найдёт (ID любой);
+       - второе направление (поперёк первого) - так же;
+       - четвёртая метка - достраиванием прямоугольника, сам;
+       - возврат на первую (ошибка замыкания) и рамка стола в calib/table_frame.json.
+     Если раскладка уже известна (прошлая сессия или показанные метки) - r объезжает
+     все метки сам, без вопросов.
+  4. m - навестись на метку в кадре и записать её (можно показать метки вручную:
+     jog 3 + wasd к каждой и m). h - к домашней метке (ID0) и наведение;
+     z - ноль G54 там (G10 L20 P1 X0 Y0).
+
+Следующие сессии: раскладка из calib/table_frame.json подхватывается сама (если
+$3/$100/$101 не менялись) - достаточно c, k, r.
+
+Ручной jog: a/d - X-/X+, w/s - Y+/Y-, 1/2/3 - шаг 0.1/1/10 мм (без ограничений -
+следите за краями). q - выход.
+
+Запуск (режим как при калибровке):
+    python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+13.70, +0.02) px = 13.70 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.04, -13.89) px = 13.89 px/мм
+По размеру метки 15 мм: 13.85 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 89.93° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.35%, Y 99.48% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 99.0%, Y 100.3%
+Люфт X: 0.048 мм (недоход на развороте)
+Люфт Y: 0.022 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.15 мм)
+ID3 наведена: X0.002 Y0.039 (остаток 0.014 мм)
+ID3 записана; записаны: ID3
+куда от ID3 ближайшая соседняя метка?   w/a/s/d = +Y/-X/-Y/+X станка (как ручной jog), ESC - отмена
+от ID3: X -269.75 мм (~268 мм реально), затем поиск шагами 62.5 мм до 300 - новая зона, по вашему направлению   [y] да / [n] нет
+ID0 наведена: X-284.230 Y0.683 (остаток 0.011 мм)
+ID0 записана; записаны: ID0, ID3
+куда от ID0 следующая метка (поперёк первого хода)?   w/a/s/d = +Y/-X/-Y/+X станка (как ручной jog), ESC - отмена
+от ID0: Y -77.40 мм (~77 мм реально), затем поиск шагами 31.3 мм до 108 - новая зона, по вашему направлению   [y] да / [n] нет
+СТОП: новой метки нет до 77 мм в этом направлении - стоп. Проверьте направление и --span
+PS C:\Users\USER\proj_pt> python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 92
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+калибровка камеры: calib_cam0_1920x1080_pinhole.json (pinhole, RMS 0.67 px) - углы меток без дисторсии, цель - главная точка (938.5, 568.1)
+
+Привязка 4 меток углов стола к координатам GRBL-станка: точное наведение камеры
+на каждую метку, рамка стола ("виртуальная плоскость") и домашняя точка.
+
+Калибровка камеры (calibrate_distortion.py) подхватывается сама по камере и
+режиму (--width/--height): углы меток исправляются от дисторсии, цель наведения -
+главная точка объектива (там дисторсии нет), реальные мм считаются по ходу
+станка, измеренному по доске при калибровке. Режим и фокус - те же, что при
+калибровке.
+
+Безопасность: автоматические ходы едут только туда, где станок уже был, или по
+направлению, которое вы сами указали (и не дальше --span + половина окна поиска).
+Перед каждым переездом - пробный ход 2 мм: если картинка сдвинулась не так, как
+предсказывает отладка осей, длинный ход не начинается. ESC - мгновенная остановка.
+
+Порядок работы:
+  1. Камера на любой угловой метке, f - автофокус (если фокус ещё не тот).
+  2. c - подключение (--port COM4); k - отладка осей (+2 +2 -2 -2 мм по X и Y:
+     направления, масштаб, люфт). i - инвертировать ось в GRBL ($3), если нужно.
+  3. r - обход по направлениям:
+       - наведение на метку под камерой;
+       - "куда следующая метка?" - w/a/s/d (как ручной jog: +Y/-X/-Y/+X станка);
+         станок едет на --span-x / --span-y в эту сторону, ищет в окне
+         --search-window и наводится на ту метку, которую найдёт (ID любой);
+       - второе направление (поперёк первого) - так же;
+       - четвёртая метка - достраиванием прямоугольника, сам;
+       - возврат на первую (ошибка замыкания) и рамка стола в calib/table_frame.json.
+     Если раскладка уже известна (прошлая сессия или показанные метки) - r объезжает
+     все метки сам, без вопросов.
+  4. m - навестись на метку в кадре и записать её (можно показать метки вручную:
+     jog 3 + wasd к каждой и m). h - к домашней метке (ID0) и наведение;
+     z - ноль G54 там (G10 L20 P1 X0 Y0).
+
+Следующие сессии: раскладка из calib/table_frame.json подхватывается сама (если
+$3/$100/$101 не менялись) - достаточно c, k, r.
+
+Ручной jog: a/d - X-/X+, w/s - Y+/Y-, 1/2/3 - шаг 0.1/1/10 мм (без ограничений -
+следите за краями). q - выход.
+
+Запуск (режим как при калибровке):
+    python scripts/survey_markers.py --camera 0 --width 1920 --height 1080 --port COM4 --span-x 283 --span-y 111
+
+СТОП: станок не подключён (c)
+СТОП: станок не подключён (c)
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+10.27, +0.06) px = 10.27 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.05, -13.67) px = 13.67 px/мм
+По размеру метки 15 мм: 13.84 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 90.10° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.35%, Y 99.48% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 74.2%, Y 98.8%
+Люфт X: 0.000 мм (недоход на развороте)
+Люфт Y: 0.049 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.15 мм)
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+13.69, +0.02) px = 13.69 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.04, -13.60) px = 13.60 px/мм
+По размеру метки 15 мм: 13.89 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 89.88° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.35%, Y 99.48% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 98.6%, Y 97.9%
+Люфт X: 0.000 мм (недоход на развороте)
+Люфт Y: 0.030 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.11 мм)
+ID3 наведена: X-0.757 Y27.115 (остаток 0.017 мм)
+ID3 записана; записаны: ID3
+куда от ID3 ближайшая соседняя метка?   w/a/s/d = +Y/-X/-Y/+X станка (как ручной jog), ESC - отмена
+от ID3: X -269.75 мм (~268 мм реально), затем поиск шагами 62.6 мм до 300 - новая зона, по вашему направлению   [y] да / [n] нет
+ID0 наведена: X-284.956 Y27.743 (остаток 0.013 мм)
+ID0 записана; записаны: ID0, ID3
+куда от ID0 следующая метка (поперёк первого хода)?   w/a/s/d = +Y/-X/-Y/+X станка (как ручной jog), ESC - отмена
+от ID0: Y +77.40 мм (~77 мм реально), затем поиск шагами 32.2 мм до 108 - новая зона, по вашему направлению   [y] да / [n] нет
+ID1 наведена: X-284.914 Y120.636 (остаток 0.008 мм)
+ID1 записана; записаны: ID0, ID1, ID3
+ход к 4-го угла (по прямоугольнику): X +284.20  Y -0.64 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID2 наведена: X-0.744 Y119.759 (остаток 0.014 мм)
+ID2 записана; записаны: ID0, ID1, ID2, ID3
+ход к ID3: Y -92.65 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID3 наведена: X-0.740 Y27.090 (остаток 0.005 мм)
+ошибка замыкания (возврат на ID3): X +0.02  Y -0.02 = 0.030 мм
+--- рамка стола: 4 метки, дом ID0 ---
+ID0: относительно ID0  X   +0.000 Y   +0.000 мм команды
+ID1: относительно ID0  X   +0.042 Y  +92.893 мм команды
+ID2: относительно ID0  X +284.212 Y  +92.015 мм команды
+ID3: относительно ID0  X +284.198 Y   -0.628 мм команды
+сторона 0-3:  284.199 мм команды =   282.35 мм реально, отклонение от оси станка -0.127°
+сторона 3-2:   92.643 мм команды =    92.16 мм реально, отклонение от оси станка -0.008°
+сторона 2-1:  284.171 мм команды =   282.33 мм реально, отклонение от оси станка -0.177°
+сторона 1-0:   92.893 мм команды =    92.41 мм реально, отклонение от оси станка -0.026°
+диагонали: 0-2: 298.736 мм команды (296.83 реально)  3-1: 299.151 мм команды (297.25 реально)
+углы: ID0: 90.101°  ID3: 89.882°  ID2: 90.169°  ID1: 89.849°
+    <- реальные стороны сверьте с линейкой (расстояния между центрами меток)
+рамка сохранена: C:\Users\USER\proj_pt\calib\table_frame.json
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+13.73, +0.06) px = 13.73 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.03, -13.94) px = 13.94 px/мм
+По размеру метки 15 мм: 13.87 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 90.10° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.35%, Y 99.48% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 99.0%, Y 100.5%
+Люфт X: 0.052 мм (недоход на развороте)
+Люфт Y: 0.017 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.15 мм)
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+отменено
+СТОП: отладка осей отменена
+ID3 наведена: X-0.752 Y27.093 (остаток 0.013 мм)
+ID3 записана (от прошлого замера X +0.01  Y -0.02 = 0.023 мм); записаны: ID0, ID1, ID2, ID3
+ход к ID2: X -0.01  Y +92.66 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID2 наведена: X-0.756 Y119.782 (остаток 0.012 мм)
+ID2 записана (от прошлого замера X -0.01  Y +0.02 = 0.027 мм); записаны: ID0, ID1, ID2, ID3
+ход к ID1: X -284.15  Y +0.85 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID1 наведена: X-284.895 Y120.638 (остаток 0.031 мм, точнее станок не доводит - учтён поправкой)
+ID1 записана (от прошлого замера X +0.02 = 0.019 мм); записаны: ID0, ID1, ID2, ID3
+ход к ID0: X -0.03  Y -92.90 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID0 наведена: X-284.938 Y27.743 (остаток 0.018 мм)
+ID0 записана (от прошлого замера X +0.02 = 0.018 мм); записаны: ID0, ID1, ID2, ID3
+ход к ID3: X +284.20  Y -0.65 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID3 наведена: X-0.718 Y27.098 (остаток 0.016 мм)
+ошибка замыкания (возврат на ID3): X +0.03 = 0.034 мм
+--- рамка стола: 4 метки, дом ID0 ---
+ID0: относительно ID0  X   +0.000 Y   +0.000 мм команды
+ID1: относительно ID0  X   +0.043 Y  +92.894 мм команды
+ID2: относительно ID0  X +284.181 Y  +92.039 мм команды
+ID3: относительно ID0  X +284.186 Y   -0.650 мм команды
+сторона 0-3:  284.187 мм команды =   282.34 мм реально, отклонение от оси станка -0.131°
+сторона 3-2:   92.689 мм команды =    92.20 мм реально, отклонение от оси станка +0.003°
+сторона 2-1:  284.140 мм команды =   282.30 мм реально, отклонение от оси станка -0.172°
+сторона 1-0:   92.894 мм команды =    92.41 мм реально, отклонение от оси станка -0.026°
+диагонали: 0-2: 298.714 мм команды (296.81 реально)  3-1: 299.146 мм команды (297.24 реально)
+углы: ID0: 90.105°  ID3: 89.866°  ID2: 90.175°  ID1: 89.854°
+    <- реальные стороны сверьте с линейкой (расстояния между центрами меток)
+рамка сохранена: C:\Users\USER\proj_pt\calib\table_frame.json
+PS C:\Users\USER\proj_pt> ды
+ды : Имя "ды" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильнос
+ть написания имени, а также наличие и правильность пути, после чего повторите попытку.
+строка:1 знак:1
++ ды
++ ~~
+    + CategoryInfo          : ObjectNotFound: (ды:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\USER\proj_pt> ls
+
+
+    Каталог: C:\Users\USER\proj_pt
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        19.10.2026     16:37                calib
+d-----        12.10.2026     17:56                common
+d-----        12.10.2026     15:12                print
+d-----        19.10.2026     15:50                scripts
+-a----        12.10.2026     17:50            274 requirements.txt
+
+
+PS C:\Users\USER\proj_pt> cd .\scripts\
+PS C:\Users\USER\proj_pt\scripts> ls
+
+
+    Каталог: C:\Users\USER\proj_pt\scripts
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        19.10.2026     16:11                __pycache__
+-a----        12.10.2026     16:48           5736 autofocus.py
+-a----        19.10.2026     15:47          36820 calibrate_distortion.py
+-a----        07.10.2026     15:18           8657 camera_params.py
+-a----        12.10.2026     17:50          10875 compare_modes.py
+-a----        12.10.2026     17:50           9133 detect_markers.py
+-a----        12.10.2026     14:51          13460 detect_point.py
+-a----        07.10.2026     13:00           2204 list_cameras.py
+-a----        07.10.2026     15:17           3501 list_formats.py
+-a----        12.10.2026     15:11          10523 make_chessboard.py
+-a----        12.10.2026     14:53           8154 make_markers.py
+-a----        19.10.2026     15:50          56301 survey_markers.py
+
+
+PS C:\Users\USER\proj_pt\scripts> explorere
+explorere : Имя "explorere" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Провер
+ьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.
+строка:1 знак:1
++ explorere
++ ~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (explorere:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\USER\proj_pt\scripts> explorer
+PS C:\Users\USER\proj_pt\scripts> cd ..
+PS C:\Users\USER\proj_pt> python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+раскладка меток из прошлой сессии: ID [0, 1, 2, 3] (проверится по $3/$100/$101 при c)
+ход станка в осях камеры: из calib_cam0_1920x1080_pinhole_rational.json; ось камеры к плоскости хода 0.43°
+калибровка: calib_cam0_1920x1080_pinhole_rational.json (pinhole_rational, RMS 0.55 px)
+плоскость меток ещё не измерена - после k сделайте t (или высоты только от стола в кадре)
+
+Высота объектов на столе и высота в точке объекта - той же камерой, без щупа и без оси Z.
+
+Как: станок сдвигает камеру относительно стола чистым сдвигом на известные ходы, поэтому кадры
+с нескольких точек - стереосъёмка с известной базой (ход станка в осях камеры - из калибровки со
+станком). Чем выше точка, тем сильнее она смещается в кадре при том же ходе (параллакс).
+Высота - от стола: от его поверхности вокруг объекта в тех же кадрах (ошибки позиционирования
+станка при этом почти сокращаются), а если стола в кадре мало - от плоскости меток (обход t).
+
+Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
+Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
+измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+
+Порядок:
+  1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
+     меток; по ходу станка и калибровке - сверка направлений и высота камеры над меткой).
+  2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
+     плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
+     (survey_markers.py r или здесь r).
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
+     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+     Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
+  4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
+     g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
+  q - выход. ESC - стоп хода.
+
+Без станка - разбор сохранённого скана (карта, клики):
+    python z/measure_height.py --from-scan scans/scan_<время>
+
+Запуск:
+    python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+
+подключение к GRBL COM4 @ 115200...
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 695, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 682, in main
+    actions[key]()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 418, in connect
+    self.grbl = self.grbl_factory()
+                ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 138, in <lambda>
+    self.grbl_factory = grbl_factory or (lambda: Grbl(args.port, args.baud))
+                                                 ~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\common\grbl.py", line 28, in __init__
+    link = serial.Serial(port, baud, timeout=0.1)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 33, in __init__
+    super(Serial, self).__init__(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialutil.py", line 244, in __init__
+    self.open()
+    ~~~~~~~~~^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 64, in open
+    raise SerialException("could not open port {!r}: {!r}".format(self.portstr, ctypes.WinError()))
+serial.serialutil.SerialException: could not open port 'COM4': PermissionError(13, 'Отказано в доступе.', None, 5)
+PS C:\Users\USER\proj_pt> python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+раскладка меток из прошлой сессии: ID [0, 1, 2, 3] (проверится по $3/$100/$101 при c)
+ход станка в осях камеры: из calib_cam0_1920x1080_pinhole_rational.json; ось камеры к плоскости хода 0.43°
+калибровка: calib_cam0_1920x1080_pinhole_rational.json (pinhole_rational, RMS 0.55 px)
+плоскость меток ещё не измерена - после k сделайте t (или высоты только от стола в кадре)
+
+Высота объектов на столе и высота в точке объекта - той же камерой, без щупа и без оси Z.
+
+Как: станок сдвигает камеру относительно стола чистым сдвигом на известные ходы, поэтому кадры
+с нескольких точек - стереосъёмка с известной базой (ход станка в осях камеры - из калибровки со
+станком). Чем выше точка, тем сильнее она смещается в кадре при том же ходе (параллакс).
+Высота - от стола: от его поверхности вокруг объекта в тех же кадрах (ошибки позиционирования
+станка при этом почти сокращаются), а если стола в кадре мало - от плоскости меток (обход t).
+
+Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
+Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
+измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+
+Порядок:
+  1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
+     меток; по ходу станка и калибровке - сверка направлений и высота камеры над меткой).
+  2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
+     плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
+     (survey_markers.py r или здесь r).
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
+     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+     Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
+  4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
+     g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
+  q - выход. ESC - стоп хода.
+
+Без станка - разбор сохранённого скана (карта, клики):
+    python z/measure_height.py --from-scan scans/scan_<время>
+
+Запуск:
+    python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+14.11, +0.02) px = 14.11 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.10, -14.05) px = 14.05 px/мм
+По размеру метки 15 мм: 14.17 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 89.67° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.37%, Y 99.47% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 99.6%, Y 99.2%
+Люфт X: 0.068 мм (недоход на развороте)
+Люфт Y: 0.026 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.19 мм)
+камера над меткой ~77.6 мм (по ходу станка; точно - по скану)
+ID3 наведена: X-0.047 Y0.220 (остаток 0.015 мм)
+ID3 записана; записаны: ID3
+t: обход всех меток, у каждой 8 доп. точек внутрь стола шагом 12 мм   [y] да / [n] нет
+ID3 наведена: X-0.049 Y0.207 (остаток 0.010 мм)
+ID3 записана (от прошлого замера Y -0.01 = 0.012 мм); записаны: ID3
+ID3: до метки 77.768 ±0.041 мм (корреляция 0.95), сторона метки 14.950 мм (печать 15), 9 точек шагом 12.0 мм
+ход к ID2: X -0.01  Y +92.69 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID2 наведена: X-0.071 Y92.888 (остаток 0.005 мм)
+ID2 записана; записаны: ID2, ID3
+ID2: до метки 78.217 ±0.047 мм (корреляция 0.83), сторона метки 14.957 мм (печать 15), 9 точек шагом 12.0 мм
+ход к ID1: X -284.12  Y +0.87 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID1 наведена: X-284.267 Y93.735 (остаток 0.016 мм)
+ID1 записана; записаны: ID1, ID2, ID3
+ID1: до метки 77.500 ±0.058 мм (корреляция 0.82), сторона метки 15.056 мм (печать 15), 9 точек шагом 12.0 мм
+ход к ID0: X +0.05  Y -92.88 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID0 наведена: X-284.284 Y0.818 (остаток 0.011 мм)
+ID0 записана; записаны: ID0, ID1, ID2, ID3
+ID0: до метки 77.303 ±0.045 мм (корреляция 0.95), сторона метки 15.032 мм (печать 15), 9 точек шагом 12.0 мм
+ход к ID3: X +284.24  Y -0.61 мм по прямой (F1500), сначала проба 2 мм   [y] да / [n] нет
+ID3 наведена: X-0.076 Y0.202 (остаток 0.011 мм)
+ошибка замыкания (возврат на ID3): X -0.03  Y -0.01 = 0.027 мм
+--- рамка стола: 4 метки, дом ID0 ---
+ID0: относительно ID0  X   +0.000 Y   +0.000 мм команды
+ID1: относительно ID0  X   +0.017 Y  +92.917 мм команды
+ID2: относительно ID0  X +284.213 Y  +92.070 мм команды
+ID3: относительно ID0  X +284.235 Y   -0.610 мм команды
+сторона 0-3:  284.235 мм команды =   282.43 мм реально, отклонение от оси станка -0.123°
+сторона 3-2:   92.680 мм команды =    92.19 мм реально, отклонение от оси станка +0.013°
+сторона 2-1:  284.197 мм команды =   282.39 мм реально, отклонение от оси станка -0.171°
+сторона 1-0:   92.917 мм команды =    92.43 мм реально, отклонение от оси станка -0.011°
+диагонали: 0-2: 298.754 мм команды (296.89 реально)  3-1: 299.211 мм команды (297.34 реально)
+углы: ID0: 90.112°  ID3: 89.864°  ID2: 90.184°  ID1: 89.840°
+    <- реальные стороны сверьте с линейкой (расстояния между центрами меток)
+рамка сохранена: C:\Users\USER\proj_pt\calib\table_frame.json
+--- плоскость стола по 4 меткам: table_plane.json ---
+камера над столом у ID0: 77.238 мм; стол к плоскости хода станка: 0.234°
+стол поднимается на -0.209 мм на 100 мм хода X+ и на -0.348 мм на 100 мм хода Y+ (к камере - плюс)
+метки над плоскостью (неплоскость стола/наклейки): ID0: -0.063  ID1: +0.063  ID2: -0.063  ID3: +0.063 мм
+сторона метки по 3D: ID0: 15.032  ID1: 15.056  ID2: 14.957  ID3: 14.950 мм (печать 15 - так проверяется масштаб высот)
+уже подключён
+СТОП: сначала клик по карте высот (точка с измеренной высотой)
+СТОП: сначала клик по карте высот (точка с измеренной высотой)
+PS C:\Users\USER\proj_pt> python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+раскладка меток из прошлой сессии: ID [0, 1, 2, 3] (проверится по $3/$100/$101 при c)
+плоскость стола из table_plane.json (2026-10-19 18:30:12)
+ход станка в осях камеры: из calib_cam0_1920x1080_pinhole_rational.json; ось камеры к плоскости хода 0.43°
+калибровка: calib_cam0_1920x1080_pinhole_rational.json (pinhole_rational, RMS 0.55 px)
+
+Высота объектов на столе и высота в точке объекта - той же камерой, без щупа и без оси Z.
+
+Как: станок сдвигает камеру относительно стола чистым сдвигом на известные ходы, поэтому кадры
+с нескольких точек - стереосъёмка с известной базой (ход станка в осях камеры - из калибровки со
+станком). Чем выше точка, тем сильнее она смещается в кадре при том же ходе (параллакс).
+Высота - от стола: от его поверхности вокруг объекта в тех же кадрах (ошибки позиционирования
+станка при этом почти сокращаются), а если стола в кадре мало - от плоскости меток (обход t).
+
+Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
+Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
+измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+
+Порядок:
+  1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
+     меток; по ходу станка и калибровке - сверка направлений и высота камеры над меткой).
+  2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
+     плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
+     (survey_markers.py r или здесь r).
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
+     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+     Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
+  4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
+     g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
+  q - выход. ESC - стоп хода.
+
+Без станка - разбор сохранённого скана (карта, клики):
+    python z/measure_height.py --from-scan scans/scan_<время>
+
+Запуск:
+    python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+
+СТОП: станок не подключён (c)
+СТОП: станок не подключён (c)
+СТОП: сначала метка в кадре - потом подключение к станку
+СТОП: станок не подключён (c)
+СТОП: станок не подключён (c)
+СТОП: станок не подключён (c)
+СТОП: сначала метка в кадре - потом подключение к станку
+PS C:\Users\USER\proj_pt> python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+раскладка меток из прошлой сессии: ID [0, 1, 2, 3] (проверится по $3/$100/$101 при c)
+плоскость стола из table_plane.json (2026-10-19 18:30:12)
+ход станка в осях камеры: из calib_cam0_1920x1080_pinhole_rational.json; ось камеры к плоскости хода 0.43°
+калибровка: calib_cam0_1920x1080_pinhole_rational.json (pinhole_rational, RMS 0.55 px)
+
+Высота объектов на столе и высота в точке объекта - той же камерой, без щупа и без оси Z.
+
+Как: станок сдвигает камеру относительно стола чистым сдвигом на известные ходы, поэтому кадры
+с нескольких точек - стереосъёмка с известной базой (ход станка в осях камеры - из калибровки со
+станком). Чем выше точка, тем сильнее она смещается в кадре при том же ходе (параллакс).
+Высота - от стола: от его поверхности вокруг объекта в тех же кадрах (ошибки позиционирования
+станка при этом почти сокращаются), а если стола в кадре мало - от плоскости меток (обход t).
+
+Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
+Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
+измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+
+Порядок:
+  1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
+     меток; по ходу станка и калибровке - сверка направлений и высота камеры над меткой).
+  2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
+     плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
+     (survey_markers.py r или здесь r).
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
+     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+     Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
+  4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
+     g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
+  q - выход. ESC - стоп хода.
+
+Без станка - разбор сохранённого скана (карта, клики):
+    python z/measure_height.py --from-scan scans/scan_<время>
+
+Запуск:
+    python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+уже подключён
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+отменено
+СТОП: отладка осей отменена
+СТОП: сначала отладка осей (k)
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+14.13, +0.08) px = 14.13 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.04, -14.19) px = 14.19 px/мм
+По размеру метки 15 мм: 14.12 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 90.16° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.37%, Y 99.47% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 100.0%, Y 100.5%
+Люфт X: 0.002 мм (недоход на развороте)
+Люфт Y: 0.010 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.10 мм)
+камера над меткой ~77.2 мм (по ходу станка; точно - по скану)
+ID3 наведена: X9.955 Y0.011 (остаток 0.007 мм)
+ID3 записана; записаны: ID3
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-121.04 Y10.02, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-183900
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 16 с, определилось 38% кадра
+отсчёт высоты: стол в кадре (13% кадра)
+стол здесь на -0.236 мм от плоскости меток, наклон к ней 0.063°
+объект #1: верх 29.694 мм (медиана 8.997, макс 29.753), центр верха под камерой при X-92.141 Y20.637
+объект #2: верх 29.219 мм (медиана 10.727, макс 29.978), центр верха под камерой при X-91.251 Y12.231
+объект #3: верх 29.170 мм (медиана 16.437, макс 29.395), центр верха под камерой при X-148.585 Y18.402
+объект #4: верх 29.057 мм (медиана 21.878, макс 29.333), центр верха под камерой при X-158.422 Y-10.517
+объект #5: верх 28.850 мм (медиана 14.053, макс 29.474), центр верха под камерой при X-87.038 Y-8.929
+объект #6: верх 28.842 мм (медиана 14.332, макс 29.744), центр верха под камерой при X-119.383 Y26.500
+объект #7: верх 28.785 мм (медиана 18.063, макс 29.208), центр верха под камерой при X-135.990 Y-7.344
+объект #8: верх 28.599 мм (медиана 16.130, макс 28.662), центр верха под камерой при X-141.635 Y-14.730
+объект #9: верх 28.264 мм (медиана 26.436, макс 28.382), центр верха под камерой при X-105.610 Y-13.964
+объект #10: верх 28.226 мм (медиана 11.646, макс 29.962), центр верха под камерой при X-114.004 Y-3.979
+объект #11: верх 24.297 мм (медиана 24.035, макс 24.309), центр верха под камерой при X-81.658 Y31.770
+объект #12: верх 21.329 мм (медиана 11.005, макс 23.689), центр верха под камерой при X-85.806 Y3.125
+объект #13: верх 15.749 мм (медиана 7.725, макс 15.773), центр верха под камерой при X-76.837 Y-16.163
+объект #14: верх 12.762 мм (медиана 12.372, макс 12.799), центр верха под камерой при X-122.621 Y18.752
+объект #15: верх 9.695 мм (медиана 6.696, макс 9.731), центр верха под камерой при X-79.404 Y-1.720
+точка: 0.057 ±3.635 мм над столом (по 9 кадрам, корреляция 0.69) - НЕНАДЁЖНО; камеру на неё: X-92.269 Y-0.349 (g)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: -0.013 ±0.199 мм над столом (по 9 кадрам, корреляция 0.80) - НЕНАДЁЖНО; камеру на неё: X-98.789 Y5.724 (g)
+точка: 16.712 ±0.176 мм над столом (по 9 кадрам, корреляция 0.65) - НЕНАДЁЖНО; камеру на неё: X-83.154 Y13.658 (g)
+точка: 10.881 ±0.333 мм над столом (по 9 кадрам, корреляция 0.87) - НЕНАДЁЖНО; камеру на неё: X-106.074 Y11.326 (g)
+навести камеру на точку (высота 10.88 мм): X +14.97  Y +1.31 мм   [y] да / [n] нет
+наведено: точка в 73.6 px от цели = 4.484 мм на её высоте (корреляция 0.85)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+СТОП: сначала клик по карте высот (точка с измеренной высотой)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+СТОП: сначала клик по карте высот (точка с измеренной высотой)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+СТОП: сначала клик по карте высот (точка с измеренной высотой)
+точка: 12.456 ±0.070 мм над столом (по 9 кадрам, корреляция 0.93) - НЕНАДЁЖНО; камеру на неё: X-113.102 Y6.127 (g)
+навести камеру на точку (высота 12.46 мм): X -7.03  Y -5.20 мм   [y] да / [n] нет
+наведено; проверить по кадру нечем (нет текстуры у точки)
+точка: 10.952 ±0.177 мм над столом (по 9 кадрам, корреляция 0.92) - НЕНАДЁЖНО; камеру на неё: X-121.062 Y23.153 (g)
+навести камеру на точку (высота 10.95 мм): X -7.96  Y +17.02 мм   [y] да / [n] нет
+наведено: точка в 162.2 px от цели = 9.880 мм на её высоте (корреляция 0.94)
+навести камеру на точку (высота 10.95 мм): 0 мм   [y] да / [n] нет
+отменено
+СТОП: отменено
+точка: 12.450 ±0.102 мм над столом (по 9 кадрам, корреляция 0.96) - НЕНАДЁЖНО; камеру на неё: X-113.581 Y6.722 (g)
+навести камеру на точку (высота 12.45 мм): X +7.48  Y -16.43 мм   [y] да / [n] нет
+наведено; проверить по кадру нечем (нет текстуры у точки)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-123.58 Y9.72, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-184502
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 14 с, определилось 49% кадра
+отсчёт высоты: стол в кадре (23% кадра)
+стол здесь на -0.115 мм от плоскости меток, наклон к ней 0.218°
+объект #1: верх 29.211 мм (медиана 6.820, макс 29.471), центр верха под камерой при X-93.526 Y14.306
+объект #2: верх 28.680 мм (медиана 18.961, макс 28.751), центр верха под камерой при X-140.699 Y-7.666
+объект #3: верх 28.284 мм (медиана 14.680, макс 29.703), центр верха под камерой при X-129.114 Y24.440
+объект #4: верх 27.108 мм (медиана 24.294, макс 29.765), центр верха под камерой при X-132.952 Y18.319
+объект #5: верх 26.928 мм (медиана 12.984, макс 29.062), центр верха под камерой при X-88.934 Y-9.356
+объект #6: верх 26.074 мм (медиана 10.194, макс 26.074), центр верха под камерой при X-109.447 Y-9.710
+объект #7: верх 26.068 мм (медиана 11.487, макс 28.855), центр верха под камерой при X-118.428 Y29.855
+объект #8: верх 25.094 мм (медиана 3.355, макс 28.736), центр верха под камерой при X-93.191 Y6.578
+объект #9: верх 24.993 мм (медиана 17.290, макс 27.937), центр верха под камерой при X-133.724 Y-10.264
+объект #10: верх 24.969 мм (медиана 24.143, макс 24.974), центр верха под камерой при X-96.469 Y32.381
+объект #11: верх 24.265 мм (медиана 23.934, макс 24.268), центр верха под камерой при X-82.897 Y31.619
+объект #12: верх 19.519 мм (медиана 6.335, макс 19.557), центр верха под камерой при X-87.553 Y11.351
+объект #13: верх 15.971 мм (медиана 15.623, макс 15.973), центр верха под камерой при X-79.479 Y17.069
+объект #14: верх 10.187 мм (медиана 0.757, макс 10.210), центр верха под камерой при X-84.002 Y9.833
+объект #15: верх 8.531 мм (медиана 3.580, макс 14.063), центр верха под камерой при X-80.951 Y21.239
+объект #16: верх 4.394 мм (медиана 2.148, макс 4.592), центр верха под камерой при X-96.009 Y-26.294
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 695, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 682, in main
+    actions[key]()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 506, in scan_here
+    self.show_map()
+    ~~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 526, in show_map
+    self.map.show(self.scan.render(self.sel))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 225, in show
+    show_scaled(self.name, img, get_zoom(self.name))
+                                ~~~~~~~~^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\common\display.py", line 23, in get_zoom
+    return ZOOM_MIN + cv2.getTrackbarPos("zoom %", win)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+cv2.error: OpenCV(5.0.0) D:\a\opencv-python\opencv-python\opencv\modules\highgui\src\window_w32.cpp:2506: error: (-27:Null pointer) NULL window: 'высоты' in function 'getTrackbarPosImpl'
+
+PS C:\Users\USER\proj_pt> python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+раскладка меток из прошлой сессии: ID [0, 1, 2, 3] (проверится по $3/$100/$101 при c)
+плоскость стола из table_plane.json (2026-10-19 18:30:12)
+ход станка в осях камеры: из calib_cam0_1920x1080_pinhole_rational.json; ось камеры к плоскости хода 0.43°
+калибровка: calib_cam0_1920x1080_pinhole_rational.json (pinhole_rational, RMS 0.55 px)
+
+Высота объектов на столе и высота в точке объекта - той же камерой, без щупа и без оси Z.
+
+Как: станок сдвигает камеру относительно стола чистым сдвигом на известные ходы, поэтому кадры
+с нескольких точек - стереосъёмка с известной базой (ход станка в осях камеры - из калибровки со
+станком). Чем выше точка, тем сильнее она смещается в кадре при том же ходе (параллакс).
+Высота - от стола: от его поверхности вокруг объекта в тех же кадрах (ошибки позиционирования
+станка при этом почти сокращаются), а если стола в кадре мало - от плоскости меток (обход t).
+
+Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
+Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
+измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+
+Порядок:
+  1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
+     меток; по ходу станка и калибровке - сверка направлений и высота камеры над меткой).
+  2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
+     плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
+     (survey_markers.py r или здесь r).
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
+     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+     Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
+  4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
+     g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
+  q - выход. ESC - стоп хода.
+
+Без станка - разбор сохранённого скана (карта, клики):
+    python z/measure_height.py --from-scan scans/scan_<время>
+
+Запуск:
+    python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+
+подключение к GRBL COM4 @ 115200...
+Traceback (most recent call last):
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 695, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\USER\proj_pt\z\measure_height.py", line 682, in main
+    actions[key]()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 418, in connect
+    self.grbl = self.grbl_factory()
+                ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\USER\proj_pt\scripts\survey_markers.py", line 138, in <lambda>
+    self.grbl_factory = grbl_factory or (lambda: Grbl(args.port, args.baud))
+                                                 ~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\proj_pt\common\grbl.py", line 28, in __init__
+    link = serial.Serial(port, baud, timeout=0.1)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 33, in __init__
+    super(Serial, self).__init__(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialutil.py", line 244, in __init__
+    self.open()
+    ~~~~~~~~~^^
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\serial\serialwin32.py", line 64, in open
+    raise SerialException("could not open port {!r}: {!r}".format(self.portstr, ctypes.WinError()))
+serial.serialutil.SerialException: could not open port 'COM4': PermissionError(13, 'Отказано в доступе.', None, 5)
+PS C:\Users\USER\proj_pt> python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+Камера 0: 1920x1080 @ -1.0 fps, cv2 сообщает формат=YUY2 (под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)
+Камера 0: фокус 197 из camera_params_0.json (автофокус выключен)
+раскладка меток из прошлой сессии: ID [0, 1, 2, 3] (проверится по $3/$100/$101 при c)
+плоскость стола из table_plane.json (2026-10-19 18:30:12)
+ход станка в осях камеры: из calib_cam0_1920x1080_pinhole_rational.json; ось камеры к плоскости хода 0.43°
+калибровка: calib_cam0_1920x1080_pinhole_rational.json (pinhole_rational, RMS 0.55 px)
+
+Высота объектов на столе и высота в точке объекта - той же камерой, без щупа и без оси Z.
+
+Как: станок сдвигает камеру относительно стола чистым сдвигом на известные ходы, поэтому кадры
+с нескольких точек - стереосъёмка с известной базой (ход станка в осях камеры - из калибровки со
+станком). Чем выше точка, тем сильнее она смещается в кадре при том же ходе (параллакс).
+Высота - от стола: от его поверхности вокруг объекта в тех же кадрах (ошибки позиционирования
+станка при этом почти сокращаются), а если стола в кадре мало - от плоскости меток (обход t).
+
+Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
+Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
+измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+
+Порядок:
+  1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
+     меток; по ходу станка и калибровке - сверка направлений и высота камеры над меткой).
+  2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
+     плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
+     (survey_markers.py r или здесь r).
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
+     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+     Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
+  4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
+     g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
+  q - выход. ESC - стоп хода.
+
+Без станка - разбор сохранённого скана (карта, клики):
+    python z/measure_height.py --from-scan scans/scan_<время>
+
+Запуск:
+    python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
+
+подключение к GRBL COM4 @ 115200...
+Grbl 1.1f ['$' for help]; состояние Idle
+уже подключён
+пробные ходы по метке ID3: X +2.00 +2.00 -2.00 -2.00, затем так же по Y (F300)   [y] да / [n] нет
+--- отладка осей ---
+Ход X +1 мм: картинка сдвигается на (+13.98, -0.01) px = 13.98 px/мм
+Ход Y +1 мм: картинка сдвигается на (+0.10, -14.03) px = 14.03 px/мм
+По размеру метки 15 мм: 14.13 px/мм  (углы без дисторсии - по калибровке)
+ось X станка: совпадает с осью меток
+ось Y станка: совпадает с осью меток
+Угол между осями X и Y станка в кадре: 89.53° (90 = перпендикулярны)
+Направление X+: камера смещается по своему кадру влево (метки в окне уезжают в обратную сторону) - сверьте: при d голова/стол должны ехать так же
+Направление Y+: камера смещается по своему кадру вниз (метки в окне уезжают в обратную сторону) - сверьте: при w голова/стол должны ехать так же
+ход по калибровке (доска): X 99.37%, Y 99.47% заказанного - им пересчитываются мм
+    по размеру метки (справочно): X 98.9%, Y 99.3%
+Люфт X: 0.000 мм (недоход на развороте)
+Люфт Y: 0.042 мм (недоход на развороте)
+выборка люфта: подход к метке всегда с + (перебег 0.13 мм)
+камера над меткой ~78.0 мм (по ходу станка; точно - по скану)
+ID3 наведена: X1.556 Y5.292 (остаток 0.010 мм)
+ID3 записана; записаны: ID3
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-132.35 Y14.30, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-185038
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 16 с, определилось 38% кадра
+отсчёт высоты: стол в кадре (11% кадра)
+стол здесь на -0.280 мм от плоскости меток, наклон к ней 0.031°
+объект #1: верх 29.868 мм (медиана 18.302, макс 29.886), центр верха под камерой при X-171.864 Y-2.379
+объект #2: верх 29.560 мм (медиана 18.568, макс 29.780), центр верха под камерой при X-146.556 Y-2.458
+объект #3: верх 29.489 мм (медиана 13.850, макс 30.077), центр верха под камерой при X-130.474 Y31.425
+объект #4: верх 29.487 мм (медиана 20.809, макс 30.052), центр верха под камерой при X-125.150 Y1.348
+объект #5: верх 28.922 мм (медиана 24.553, макс 29.578), центр верха под камерой при X-133.546 Y23.262
+объект #6: верх 28.765 мм (медиана 10.922, макс 29.614), центр верха под камерой при X-100.309 Y-4.540
+объект #7: верх 28.522 мм (медиана 3.012, макс 28.889), центр верха под камерой при X-119.293 Y-8.911
+объект #8: верх 27.314 мм (медиана 9.441, макс 27.339), центр верха под камерой при X-154.589 Y14.616
+объект #9: верх 25.493 мм (медиана 19.087, макс 25.619), центр верха под камерой при X-145.006 Y-11.318
+объект #10: верх 25.315 мм (медиана 17.973, макс 25.708), центр верха под камерой при X-143.453 Y-5.030
+объект #11: верх 24.768 мм (медиана 24.370, макс 24.775), центр верха под камерой при X-91.278 Y36.547
+объект #12: верх 24.686 мм (медиана 8.309, макс 25.141), центр верха под камерой при X-90.446 Y24.018
+объект #13: верх 23.827 мм (медиана 16.964, макс 23.838), центр верха под камерой при X-159.701 Y16.208
+объект #14: верх 22.685 мм (медиана 9.712, макс 22.685), центр верха под камерой при X-85.885 Y-5.551
+объект #15: верх 10.573 мм (медиана 4.880, макс 11.138), центр верха под камерой при X-103.684 Y-11.889
+точка: 24.957 ±0.064 мм над столом (по 9 кадрам, корреляция 0.77) - НЕНАДЁЖНО; камеру на неё: X-139.091 Y12.932 (g)
+точка: 24.948 ±2.695 мм над столом (по 9 кадрам, корреляция 0.62) - НЕНАДЁЖНО; камеру на неё: X-139.100 Y14.384 (g)
+точка: 25.032 ±0.141 мм над столом (по 9 кадрам, корреляция 0.63) - НЕНАДЁЖНО; камеру на неё: X-133.608 Y20.793 (g)
+точка: 24.915 ±0.073 мм над столом (по 9 кадрам, корреляция 0.66) - НЕНАДЁЖНО; камеру на неё: X-131.768 Y20.815 (g)
+точка: 24.808 ±0.100 мм над столом (по 9 кадрам, корреляция 0.56) - НЕНАДЁЖНО; камеру на неё: X-131.180 Y19.858 (g)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: 24.421 ±0.278 мм над столом (по 9 кадрам, корреляция 0.78) - НЕНАДЁЖНО; камеру на неё: X-136.031 Y13.029 (g)
+точка: 10.013 ±3.300 мм над столом (по 9 кадрам, корреляция 0.37) - НЕНАДЁЖНО; камеру на неё: X-136.385 Y9.340 (g)
+точка: 24.444 ±0.175 мм над столом (по 9 кадрам, корреляция 0.73) - НЕНАДЁЖНО; камеру на неё: X-128.124 Y15.212 (g)
+навести камеру на точку (высота 24.44 мм): X +4.23  Y +0.91 мм   [y] да / [n] нет
+наведено: точка в 1.5 px от цели = 0.072 мм на её высоте (корреляция 0.93)
+точка: 24.997 ±0.126 мм над столом (по 9 кадрам, корреляция 0.67) - НЕНАДЁЖНО; камеру на неё: X-130.704 Y20.809 (g)
+точка: 18.195 ±0.272 мм над столом (по 9 кадрам, корреляция 0.77) - НЕНАДЁЖНО; камеру на неё: X-132.391 Y6.139 (g)
+точка: 24.537 ±0.217 мм над столом (по 9 кадрам, корреляция 0.58) - НЕНАДЁЖНО; камеру на неё: X-127.627 Y10.630 (g)
+точка: 24.214 ±0.072 мм над столом (по 9 кадрам, корреляция 0.87) - НЕНАДЁЖНО; камеру на неё: X-129.381 Y15.309 (g)
+точка: 24.456 ±0.071 мм над столом (по 9 кадрам, корреляция 0.71) - НЕНАДЁЖНО; камеру на неё: X-128.125 Y15.310 (g)
+точка: 24.934 ±1.094 мм над столом (по 9 кадрам, корреляция 0.51) - НЕНАДЁЖНО; камеру на неё: X-130.987 Y19.263 (g)
+точка: 24.417 ±0.169 мм над столом (по 9 кадрам, корреляция 0.74) - НЕНАДЁЖНО; камеру на неё: X-128.220 Y15.310 (g)
+точка: 24.436 ±0.181 мм над столом (по 9 кадрам, корреляция 0.40) - НЕНАДЁЖНО; камеру на неё: X-130.187 Y18.138 (g)
+точка: 25.224 ±3.390 мм над столом (по 9 кадрам, корреляция 0.67) - НЕНАДЁЖНО; камеру на неё: X-129.076 Y21.656 (g)
+точка: 24.994 ±0.087 мм над столом (по 9 кадрам, корреляция 0.66) - НЕНАДЁЖНО; камеру на неё: X-131.091 Y20.711 (g)
+точка: 25.121 ±0.147 мм над столом (по 9 кадрам, корреляция 0.79) - НЕНАДЁЖНО; камеру на неё: X-128.294 Y20.706 (g)
+точка: 25.152 ±0.100 мм над столом (по 9 кадрам, корреляция 0.83) - НЕНАДЁЖНО; камеру на неё: X-139.457 Y13.803 (g)
+точка: 24.757 ±0.090 мм над столом (по 9 кадрам, корреляция 0.94) - НЕНАДЁЖНО; камеру на неё: X-138.154 Y14.777 (g)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-128.12 Y15.21, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-185546
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 14 с, определилось 30% кадра
+отсчёт высоты: стол в кадре (13% кадра)
+стол здесь на +1.589 мм от плоскости меток, наклон к ней 0.194°
+объект #1: верх 27.647 мм (медиана 24.557, макс 27.668), центр верха под камерой при X-170.973 Y-1.975
+объект #2: верх 27.630 мм (медиана 14.714, макс 27.689), центр верха под камерой при X-169.794 Y31.515
+объект #3: верх 26.642 мм (медиана 24.099, макс 27.440), центр верха под камерой при X-100.366 Y5.256
+объект #4: верх 25.946 мм (медиана 9.703, макс 28.020), центр верха под камерой при X-98.441 Y9.531
+объект #5: верх 25.757 мм (медиана 6.002, макс 26.038), центр верха под камерой при X-160.038 Y-8.836
+объект #6: верх 25.378 мм (медиана 17.344, макс 25.384), центр верха под камерой при X-168.189 Y-9.024
+объект #7: верх 25.215 мм (медиана 8.634, макс 27.994), центр верха под камерой при X-168.781 Y0.758
+объект #8: верх 22.431 мм (медиана 5.937, макс 22.646), центр верха под камерой при X-137.538 Y-10.254
+объект #9: верх 19.731 мм (медиана 10.134, макс 19.735), центр верха под камерой при X-111.160 Y-11.928
+объект #10: верх 12.939 мм (медиана 1.199, макс 26.191), центр верха под камерой при X-128.572 Y13.862
+объект #11: верх 8.059 мм (медиана 4.636, макс 8.339), центр верха под камерой при X-157.855 Y-16.763
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: 0.023 ±0.057 мм над столом (по 9 кадрам, корреляция 0.97) - НЕНАДЁЖНО; камеру на неё: X-172.502 Y16.028 (g)
+точка: 2.303 ±0.043 мм над столом (по 9 кадрам, корреляция 0.60); камеру на неё: X-143.325 Y14.499 (g)
+точка: 1.570 ±0.116 мм над столом (по 9 кадрам, корреляция 0.79) - НЕНАДЁЖНО; камеру на неё: X-117.468 Y17.188 (g)
+точка: 12.874 ±0.096 мм над столом (по 9 кадрам, корреляция 0.66) - НЕНАДЁЖНО; камеру на неё: X-128.192 Y12.691 (g)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: 1.213 ±0.050 мм над столом (по 9 кадрам, корреляция 0.79) - НЕНАДЁЖНО; камеру на неё: X-151.781 Y16.098 (g)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: -0.045 ±0.084 мм над столом (по 9 кадрам, корреляция 0.92) - НЕНАДЁЖНО; камеру на неё: X-167.559 Y2.682 (g)
+точка: 0.984 ±0.054 мм над столом (по 9 кадрам, корреляция 0.89) - НЕНАДЁЖНО; камеру на неё: X-147.312 Y15.157 (g)
+точка: 2.957 ±0.000 мм над столом (по 9 кадрам, корреляция 0.75) - НЕНАДЁЖНО; камеру на неё: X-79.368 Y4.102 (g)
+точка: 0.020 ±0.076 мм над столом (по 9 кадрам, корреляция 0.98) - НЕНАДЁЖНО; камеру на неё: X-174.031 Y15.186 (g)
+точка: 0.042 ±0.064 мм над столом (по 9 кадрам, корреляция 0.96) - НЕНАДЁЖНО; камеру на неё: X-175.831 Y15.179 (g)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: -0.130 ±0.070 мм над столом (по 6 кадрам, корреляция 0.93) - НЕНАДЁЖНО; камеру на неё: X-157.136 Y44.332 (g)
+точка: -0.598 ±0.192 мм над столом (по 9 кадрам, корреляция 0.96) - НЕНАДЁЖНО; камеру на неё: X-180.179 Y33.163 (g)
+точка: 0.013 ±0.025 мм над столом (по 6 кадрам, корреляция 0.89); камеру на неё: X-153.272 Y37.861 (g)
+точка: 2.250 ±0.093 мм над столом (по 9 кадрам, корреляция 0.71) - НЕНАДЁЖНО; камеру на неё: X-143.603 Y13.957 (g)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-128.12 Y15.21, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-185902
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 15 с, определилось 42% кадра
+отсчёт высоты: стол в кадре (14% кадра)
+стол здесь на -0.152 мм от плоскости меток, наклон к ней 0.380°
+объект #1: верх 29.726 мм (медиана 16.819, макс 29.786), центр верха под камерой при X-131.556 Y-1.890
+объект #2: верх 29.679 мм (медиана 24.237, макс 30.080), центр верха под камерой при X-89.735 Y-6.781
+объект #3: верх 29.601 мм (медиана 23.895, макс 29.616), центр верха под камерой при X-96.473 Y-1.574
+объект #4: верх 29.491 мм (медиана 24.768, макс 29.541), центр верха под камерой при X-97.944 Y-8.969
+объект #5: верх 29.382 мм (медиана 12.649, макс 29.766), центр верха под камерой при X-105.977 Y31.546
+объект #6: верх 29.333 мм (медиана 19.386, макс 29.545), центр верха под камерой при X-165.125 Y-5.318
+объект #7: верх 29.308 мм (медиана 18.509, макс 29.555), центр верха под камерой при X-147.981 Y-1.889
+объект #8: верх 29.294 мм (медиана 16.236, макс 29.346), центр верха под камерой при X-145.657 Y-9.349
+объект #9: верх 29.209 мм (медиана 17.543, макс 29.350), центр верха под камерой при X-171.406 Y-2.054
+объект #10: верх 28.926 мм (медиана 9.637, макс 29.689), центр верха под камерой при X-104.049 Y-8.163
+объект #11: верх 28.904 мм (медиана 13.229, макс 29.678), центр верха под камерой при X-121.622 Y23.603
+объект #12: верх 28.542 мм (медиана 7.001, макс 28.804), центр верха под камерой при X-147.801 Y-5.360
+объект #13: верх 27.556 мм (медиана 27.210, макс 27.585), центр верха под камерой при X-129.454 Y-5.761
+объект #14: верх 27.050 мм (медиана 17.113, макс 29.563), центр верха под камерой при X-149.028 Y0.714
+объект #15: верх 26.917 мм (медиана 23.109, макс 26.922), центр верха под камерой при X-105.136 Y-4.721
+объект #16: верх 26.458 мм (медиана 22.355, макс 26.500), центр верха под камерой при X-155.026 Y26.405
+объект #17: верх 23.314 мм (медиана 12.727, макс 23.333), центр верха под камерой при X-138.913 Y7.159
+объект #18: верх 17.306 мм (медиана 11.224, макс 17.306), центр верха под камерой при X-114.954 Y-6.271
+объект #19: верх 17.067 мм (медиана 8.445, макс 17.147), центр верха под камерой при X-100.805 Y16.690
+объект #20: верх 13.278 мм (медиана 1.328, макс 27.480), центр верха под камерой при X-130.347 Y12.533
+точка: 13.038 ±0.064 мм над столом (по 9 кадрам, корреляция 0.73) - НЕНАДЁЖНО; камеру на неё: X-128.311 Y12.269 (g)
+точка: 12.872 ±0.073 мм над столом (по 9 кадрам, корреляция 0.97) - НЕНАДЁЖНО; камеру на неё: X-127.509 Y18.921 (g)
+точка: 1.911 ±0.068 мм над столом (по 9 кадрам, корреляция 0.94) - НЕНАДЁЖНО; камеру на неё: X-155.870 Y13.871 (g)
+точка: 1.255 ±0.056 мм над столом (по 9 кадрам, корреляция 0.85) - НЕНАДЁЖНО; камеру на неё: X-138.440 Y13.092 (g)
+точка: 1.963 ±0.048 мм над столом (по 9 кадрам, корреляция 0.84); камеру на неё: X-139.462 Y14.496 (g)
+точка: 1.963 ±0.048 мм над столом (по 9 кадрам, корреляция 0.84); камеру на неё: X-139.462 Y14.496 (g)
+точка: 1.964 ±0.038 мм над столом (по 9 кадрам, корреляция 0.81); камеру на неё: X-138.769 Y14.776 (g)
+точка: 1.962 ±0.039 мм над столом (по 9 кадрам, корреляция 0.85); камеру на неё: X-138.073 Y14.502 (g)
+точка: 1.962 ±0.039 мм над столом (по 9 кадрам, корреляция 0.85); камеру на неё: X-138.073 Y14.502 (g)
+точка: 1.968 ±0.039 мм над столом (по 9 кадрам, корреляция 0.82); камеру на неё: X-138.353 Y15.056 (g)
+точка: 2.359 ±0.109 мм над столом (по 9 кадрам, корреляция 0.54) - НЕНАДЁЖНО; камеру на неё: X-112.758 Y14.886 (g)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-128.12 Y15.21, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-190156
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 16 с, определилось 64% кадра
+отсчёт высоты: плоскость меток (стола в кадре мало)
+объект #1: верх 29.117 мм (медиана 17.903, макс 29.117), центр верха под камерой при X-171.071 Y-2.055
+объект #2: верх 26.944 мм (медиана 3.422, макс 26.959), центр верха под камерой при X-169.006 Y-8.975
+объект #3: верх 23.600 мм (медиана 18.560, макс 29.483), центр верха под камерой при X-92.777 Y0.478
+объект #4: верх 21.212 мм (медиана 4.703, макс 21.228), центр верха под камерой при X-128.332 Y17.009
+объект #5: верх 15.959 мм (медиана 11.963, макс 16.288), центр верха под камерой при X-130.337 Y26.294
+объект #6: верх 12.681 мм (медиана 6.193, макс 15.919), центр верха под камерой при X-139.542 Y19.097
+объект #7: верх 10.014 мм (медиана 8.513, макс 10.023), центр верха под камерой при X-123.558 Y26.842
+объект #8: верх 0.611 мм (медиана 0.558, макс 0.615), центр верха под камерой при X-148.470 Y21.397
+точка: 18.667 ±0.024 мм над столом (по 9 кадрам, корреляция 0.90); камеру на неё: X-157.871 Y25.707 (g)
+точка: 18.484 ±0.028 мм над столом (по 9 кадрам, корреляция 0.84); камеру на неё: X-102.382 Y9.402 (g)
+точка: 18.438 ±0.068 мм над столом (по 9 кадрам, корреляция 0.66) - НЕНАДЁЖНО; камеру на неё: X-110.576 Y17.576 (g)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-128.12 Y15.21, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-190516
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 14 с, определилось 57% кадра
+отсчёт высоты: плоскость меток (стола в кадре мало)
+объект #1: верх 23.230 мм (медиана 11.261, макс 27.402), центр верха под камерой при X-88.779 Y-11.032
+объект #2: верх 20.322 мм (медиана 12.902, макс 20.978), центр верха под камерой при X-122.305 Y-9.920
+объект #3: верх 19.021 мм (медиана 12.881, макс 29.765), центр верха под камерой при X-159.158 Y2.556
+объект #4: верх 14.413 мм (медиана 13.021, макс 14.414), центр верха под камерой при X-88.971 Y-13.770
+объект #5: верх 13.628 мм (медиана 13.038, макс 13.686), центр верха под камерой при X-81.080 Y7.588
+объект #6: верх 13.243 мм (медиана 13.025, макс 13.248), центр верха под камерой при X-119.323 Y-5.523
+объект #7: верх 13.066 мм (медиана 11.983, макс 13.088), центр верха под камерой при X-120.778 Y11.985
+объект #8: верх 13.041 мм (медиана 11.995, макс 13.047), центр верха под камерой при X-125.595 Y4.651
+объект #9: верх 13.015 мм (медиана 12.808, макс 13.060), центр верха под камерой при X-121.277 Y23.952
+объект #10: верх 12.894 мм (медиана 12.822, макс 12.902), центр верха под камерой при X-136.486 Y5.997
+объект #11: верх 12.810 мм (медиана 12.666, макс 12.830), центр верха под камерой при X-138.109 Y21.522
+объект #12: верх 12.759 мм (медиана 11.816, макс 12.760), центр верха под камерой при X-113.872 Y35.416
+объект #13: верх 12.752 мм (медиана 12.689, макс 12.753), центр верха под камерой при X-147.195 Y5.918
+точка: 13.032 ±0.051 мм над столом (по 9 кадрам, корреляция 0.66) - НЕНАДЁЖНО; камеру на неё: X-106.368 Y10.016 (g)
+точка: 13.092 ±0.045 мм над столом (по 9 кадрам, корреляция 0.97); камеру на неё: X-167.838 Y18.736 (g)
+точка: 13.276 ±0.054 мм над столом (по 9 кадрам, корреляция 0.96) - НЕНАДЁЖНО; камеру на неё: X-162.272 Y16.507 (g)
+точка: 13.031 ±0.062 мм над столом (по 9 кадрам, корреляция 0.66) - НЕНАДЁЖНО; камеру на неё: X-106.131 Y9.074 (g)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-128.12 Y15.21, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-190710
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 14 с, определилось 47% кадра
+отсчёт высоты: стол в кадре (10% кадра)
+стол здесь на -0.206 мм от плоскости меток, наклон к ней 0.164°
+объект #1: верх 29.585 мм (медиана 15.024, макс 30.038), центр верха под камерой при X-120.607 Y31.872
+объект #2: верх 29.378 мм (медиана 28.398, макс 29.459), центр верха под камерой при X-141.813 Y-7.161
+объект #3: верх 29.367 мм (медиана 8.343, макс 29.526), центр верха под камерой при X-98.898 Y18.854
+объект #4: верх 29.174 мм (медиана 14.034, макс 29.498), центр верха под камерой при X-94.955 Y-3.753
+объект #5: верх 28.931 мм (медиана 10.884, макс 29.631), центр верха под камерой при X-143.370 Y-1.799
+объект #6: верх 28.404 мм (медиана 24.731, макс 28.658), центр верха под камерой при X-140.683 Y9.418
+объект #7: верх 27.168 мм (медиана 3.859, макс 27.178), центр верха под камерой при X-167.873 Y-8.971
+объект #8: верх 25.625 мм (медиана 10.211, макс 29.434), центр верха под камерой при X-98.056 Y-1.428
+объект #9: верх 24.833 мм (медиана 6.076, макс 25.047), центр верха под камерой при X-83.153 Y3.018
+объект #10: верх 24.619 мм (медиана 1.564, макс 28.264), центр верха под камерой при X-144.735 Y7.538
+объект #11: верх 23.589 мм (медиана 22.827, макс 23.595), центр верха под камерой при X-160.964 Y26.426
+объект #12: верх 18.765 мм (медиана 17.235, макс 18.977), центр верха под камерой при X-137.545 Y-5.703
+объект #13: верх 12.374 мм (медиана 2.025, макс 12.578), центр верха под камерой при X-88.277 Y-18.421
+точка: 10.219 ±0.046 мм над столом (по 9 кадрам, корреляция 0.66); камеру на неё: X-128.241 Y22.538 (g)
+скан: 9 кадров, сетка 3x3 шаг 12 мм (охват X 24 Y 24 мм) от X-128.12 Y13.21, подход с +, затем назад   [y] да / [n] нет
+кадры скана сохранены: C:\Users\USER\proj_pt\scans\scan_20261019-190915
+считаю карту высот... (ESC - отмена)
+карта высот: 133 уровней x 8 кадров за 14 с, определилось 42% кадра
+отсчёт высоты: стол в кадре (10% кадра)
+стол здесь на -0.174 мм от плоскости меток, наклон к ней 0.533°
+объект #1: верх 29.589 мм (медиана 11.811, макс 29.696), центр верха под камерой при X-146.961 Y-10.002
+объект #2: верх 29.513 мм (медиана 22.281, макс 29.890), центр верха под камерой при X-156.495 Y-2.877
+объект #3: верх 29.498 мм (медиана 3.080, макс 29.530), центр верха под камерой при X-115.613 Y12.596
+объект #4: верх 29.388 мм (медиана 23.439, макс 29.459), центр верха под камерой при X-168.007 Y-10.148
+объект #5: верх 28.783 мм (медиана 8.840, макс 29.645), центр верха под камерой при X-94.766 Y-4.870
+объект #6: верх 28.323 мм (медиана 11.684, макс 29.768), центр верха под камерой при X-140.723 Y12.227
+объект #7: верх 27.909 мм (медиана 9.915, макс 29.907), центр верха под камерой при X-115.245 Y0.969
+объект #8: верх 25.812 мм (медиана 23.741, макс 26.347), центр верха под камерой при X-136.807 Y-5.170
+объект #9: верх 25.474 мм (медиана 10.996, макс 28.271), центр верха под камерой при X-87.484 Y3.027
+объект #10: верх 24.797 мм (медиана 24.549, макс 24.814), центр верха под камерой при X-90.111 Y36.108
+объект #11: верх 11.376 мм (медиана 6.865, макс 27.217), центр верха под камерой при X-100.440 Y-14.943
+объект #12: верх 8.157 мм (медиана 3.870, макс 8.543), центр верха под камерой при X-105.330 Y3.659
+объект #13: верх 3.707 мм (медиана 1.941, макс 3.751), центр верха под камерой при X-101.362 Y25.274
+объект #14: верх 3.663 мм (медиана 1.028, макс 3.740), центр верха под камерой при X-107.146 Y23.014
+точка: 9.979 ±0.024 мм над столом (по 6 кадрам, корреляция 0.87); камеру на неё: X-154.277 Y38.468 (g)
+точка: 9.905 ±0.052 мм над столом (по 6 кадрам, корреляция 0.92) - НЕНАДЁЖНО; камеру на неё: X-150.825 Y39.873 (g)
+точка: 9.776 ±0.055 мм над столом (по 6 кадрам, корреляция 0.91) - НЕНАДЁЖНО; камеру на неё: X-99.752 Y37.448 (g)
+точка: 9.899 ±0.038 мм над столом (по 6 кадрам, корреляция 0.95); камеру на неё: X-133.919 Y40.913 (g)
+точка: 9.892 ±0.037 мм над столом (по 6 кадрам, корреляция 0.92); камеру на неё: X-129.443 Y39.934 (g)
+точка: 9.952 ±0.041 мм над столом (по 6 кадрам, корреляция 0.87); камеру на неё: X-128.914 Y32.714 (g)
+точка: 18.790 ±0.260 мм над столом (по 9 кадрам, корреляция 0.75) - НЕНАДЁЖНО; камеру на неё: X-145.605 Y16.725 (g)
+точка: 10.031 ±0.051 мм над столом (по 9 кадрам, корреляция 0.88) - НЕНАДЁЖНО; камеру на неё: X-159.309 Y28.130 (g)
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: в точке нет текстуры (однотонно) - высоту не по чему мерить
+точка: 10.609 ±3.204 мм над столом (по 9 кадрам, корреляция 0.35) - НЕНАДЁЖНО; камеру на неё: X-167.873 Y15.903 (g)
+точка: 14.277 ±0.268 мм над столом (по 9 кадрам, корреляция 0.82) - НЕНАДЁЖНО; камеру на неё: X-161.428 Y25.551 (g)
+точка: 16.634 ±0.222 мм над столом (по 9 кадрам, корреляция 0.75) - НЕНАДЁЖНО; камеру на неё: X-146.018 Y16.630 (g)
+точка: 9.848 ±0.091 мм над столом (по 6 кадрам, корреляция 0.90) - НЕНАДЁЖНО; камеру на неё: X-153.584 Y39.390 (g)
+точка: 9.839 ±0.051 мм над столом (по 6 кадрам, корреляция 0.79) - НЕНАДЁЖНО; камеру на неё: X-151.729 Y41.888 (g)
+точка: 9.835 ±0.081 мм над столом (по 6 кадрам, корреляция 0.95) - НЕНАДЁЖНО; камеру на неё: X-143.387 Y42.408 (g)
+точка: 1.862 ±0.277 мм над столом (по 9 кадрам, корреляция 0.94) - НЕНАДЁЖНО; камеру на неё: X-103.335 Y31.511 (g)
+точка: 9.078 ±0.189 мм над столом (по 9 кадрам, корреляция 0.83) - НЕНАДЁЖНО; камеру на неё: X-95.048 Y30.809 (g)
+точка: 10.100 ±0.069 мм над столом (по 9 кадрам, корреляция 0.89) - НЕНАДЁЖНО; камеру на неё: X-97.542 Y8.417 (g)
+PS C:\Users\USER\proj_pt>

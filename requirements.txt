@@ -1,0 +1,5 @@
+opencv-python>=4.8
+numpy>=1.24
+pygrabber>=0.2  # опционально, только для scripts/list_formats.py (Windows/DirectShow)
+pyserial>=3.5   # связь с GRBL (scripts/survey_markers.py)
+Pillow>=10      # подписи в окнах с кириллицей
