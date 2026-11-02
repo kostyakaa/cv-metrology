@@ -17,8 +17,10 @@
   2. t - один раз (и каждый раз, когда трогали стол/метки): обход меток с замером высоты у каждой ->
      плоскость стола и её наклон к ходу станка, calib/table_plane.json. Нужна раскладка меток
      (survey_markers.py r или здесь r).
-  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. s - скан:
-     --grid x --grid кадров с шагом --baseline мм (подход к каждой точке с +), возврат в исходную.
+  3. Камера над объектом (wasd, шаг 1/2/3): объект в середине кадра, вокруг виден стол. p - скан:
+     По умолчанию 5x5 = 25 ракурсов, запрошенный шаг 16 мм (размах до 64x64 мм).
+     Шаг автоматически уменьшается по границам и перекрытию на высоте --max-height.
+     Подход к каждой точке с +, возврат в исходную. Фактический план виден до подтверждения.
      Окно "высоты": карта высот, объекты и их высота над столом. Кадры скана - в scans/.
   4. Клик по карте - высота в точке (уточнение на полном разрешении по всем кадрам скана).
      g - навести камеру на выбранную точку (с учётом её высоты) и проверить по кадру.
@@ -50,7 +52,7 @@ from common.grbl import GrblError  # noqa: E402
 from common.markers import detect  # noqa: E402
 from stereo import (Rectifier, SweepAborted, find_objects, fit_plane, half, load_motion, local_table,  # noqa: E402
                     motion_normal, plane_sweep, points_from_heights, refine_point, under_camera,
-                    colorize)
+                    colorize, plane_homography)
 from survey_markers import (JOG_KEYS, JOG_STEPS, LAYOUT_SETTINGS, Abort, Survey, WindowUI, add_survey_args,  # noqa: E402
                             angle_deg, find_calibration, fmt_move)
 
@@ -84,11 +86,23 @@ class ScanResult:
         step = args.sweep_step
         heights = np.arange(-args.below, args.max_height + step / 2, step)
         t0 = time.time()
-        others = [h[0] for h in halfs[1:args.map_views + 1]] if args.map_views else [h[0] for h in halfs[1:]]
+        indices = list(range(1, len(halfs)))
+        if args.map_views:
+            # При ограничении числа кадров берём разные стороны и базы, а не начало змейки.
+            selected, anchors = [], [np.zeros(3)]
+            while indices and len(selected) < args.map_views:
+                best = max(indices, key=lambda j: min(np.linalg.norm(self.Os[j] - a) for a in anchors))
+                selected.append(best)
+                anchors.append(self.Os[best])
+                indices.remove(best)
+            indices = selected
+        if not 2 <= args.min_map_views <= len(indices):
+            raise ValueError("недостаточно ракурсов для --min-map-views; увеличьте --map-views или уменьшите минимум")
+        others = [halfs[i][0] for i in indices]
         self.hmap, self.score, self.valid = plane_sweep(
-            halfs[0][0], others, self.Os[1:len(others) + 1], self.Ks, n0, d0, heights, ref_valid=vh,
+            halfs[0][0], others, [self.Os[i] for i in indices], self.Ks, n0, d0, heights, ref_valid=vh,
             others_valid=[vh] * len(others), win=args.win, min_std=args.min_texture, min_score=args.min_score,
-            tick=tick)
+            min_views=args.min_map_views, tick=tick)
         log(f"карта высот: {len(heights)} уровней x {len(others)} кадров за {time.time() - t0:.0f} с, "
             f"определилось {100 * self.valid.mean():.0f}% кадра")
         self.X = points_from_heights(self.hmap, self.Ks, n0, d0)
@@ -331,9 +345,9 @@ class HeightTool(Survey):
         side_px = float(np.mean(np.linalg.norm(np.roll(m0["corners"], -1, axis=0) - m0["corners"], axis=1)))
         patch = int(1.25 * side_px) // 2 * 2 + 1  # метка + немного белого поля
         half_px = patch / 2 + 20
-        b = self.args.baseline
+        b = self.args.marker_baseline
         while True:  # метка должна остаться в кадре во всех точках
-            steps = np.arange(self.args.grid) * b
+            steps = np.arange(self.args.marker_grid) * b
             offs = [sgn * np.array([sx, sy]) for sy in steps for sx in steps]
             pred = [m0["center"] + self.A @ o for o in offs]
             if all(half_px < p[0] < self.size[0] - half_px and half_px < p[1] < self.size[1] - half_px for p in pred):
@@ -364,12 +378,15 @@ class HeightTool(Survey):
     def measure_table_plane(self):
         """t: обход меток (как r) с замером высоты стола у каждой -> плоскость меток."""
         self.require_grbl()
+        if (self.args.marker_grid < 2 or not np.isfinite(self.args.marker_baseline)
+                or self.args.marker_baseline <= 0):
+            raise Abort("--marker-grid должен быть >= 2, --marker-baseline положительным")
         if self.A is None:
             raise Abort("сначала отладка осей (k)")
         if len(self.expected()) < 4:
             raise Abort("нужна раскладка меток: обход r (здесь или в survey_markers.py)")
-        if not self.confirm(f"t: обход всех меток, у каждой {self.args.grid ** 2 - 1} доп. точек внутрь стола "
-                            f"шагом {self.args.baseline:g} мм"):
+        if not self.confirm(f"t: обход всех меток, у каждой {self.args.marker_grid ** 2 - 1} доп. точек внутрь стола "
+                            f"шагом {self.args.marker_baseline:g} мм"):
             raise Abort("отменено")
         self.marker_3d = {}
         self.depth_pass = True
@@ -421,30 +438,62 @@ class HeightTool(Survey):
     # ---------- скан
     def plan_scan(self, c0):
         g, b = self.args.grid, self.args.baseline
-        if g < 2:
-            raise Abort("--grid должен быть >= 2")
+        if g < 3 or g % 2 == 0 or not np.isfinite(b) or b <= 0:
+            raise Abort("--grid: нечётное число >= 3; --baseline: положительный конечный шаг")
+        if not 0 < self.args.min_overlap <= 1:
+            raise Abort("--min-overlap должен быть в (0, 1]")
+        if not 2 <= self.args.min_map_views <= g * g - 1:
+            raise Abort("--min-map-views: от 2 до числа дополнительных ракурсов")
+        if self.args.map_views and self.args.map_views < self.args.min_map_views:
+            raise Abort("--map-views меньше --min-map-views")
         k = np.arange(g) - (g - 1) // 2
         exp = self.expected()
-        axes = []
-        for i in range(2):
-            offs = k * b
-            if len(exp) >= 4:  # камера не выходит за прямоугольник меток (+ --scan-margin)
-                P = np.array(list(exp.values()))
-                lo, hi = P[:, i].min() - self.args.scan_margin, P[:, i].max() + self.args.scan_margin
-                if c0[i] + offs.min() < lo:
-                    offs = offs - offs.min()
-                if c0[i] + offs.max() > hi:
-                    offs = offs - offs.max()
-                if c0[i] + offs.min() < lo - 1e-6 or c0[i] + offs.max() > hi + 1e-6:
-                    raise Abort("скан не помещается в прямоугольник меток по оси " + "XY"[i])
-            axes.append(offs)
-        positions = []
-        for j, oy in enumerate(axes[1]):
-            for ox in (axes[0] if j % 2 == 0 else axes[0][::-1]):
-                positions.append(c0 + np.array([ox, oy], float))
-        for p in positions:
-            self.check_target(p)
-        return positions
+        if len(exp) < 4:
+            raise Abort("для расширенного скана нужна привязка к четырём меткам (k, затем r)")
+        P = np.array(list(exp.values()))
+        lo = P.min(axis=0) - self.args.scan_margin
+        hi = P.max(axis=0) + self.args.scan_margin
+        bc = self.backlash_comp
+        if np.any(c0 - bc < lo) or np.any(c0 > hi):
+            raise Abort("исходная точка и подход с выборкой люфта должны быть внутри границ скана")
+        guess, _ = self.plane_guess(c0)
+        n, d, _ = guess
+        if not np.isfinite(d) or self.args.max_height >= d - 5:
+            raise Abort("--max-height должен быть ниже расстояния до стола минимум на 5 мм")
+        # Проверка видимой площади на малой маске, на столе и на максимальной высоте.
+        mask = cv2.resize(self.rect.valid.astype(np.uint8), (192, 108), interpolation=cv2.INTER_NEAREST)
+        S = np.diag([192 / self.size[0], 108 / self.size[1], 1.0])
+        Ksmall = S @ self.K
+        for _ in range(40):
+            axes = []
+            for i in range(2):
+                candidates = [(k + shift) * b for shift in range(-(g // 2), g // 2 + 1)]
+                candidates = [o for o in candidates if c0[i] + o.min() - bc >= lo[i]
+                              and c0[i] + o.max() <= hi[i]]
+                if not candidates:
+                    break
+                axes.append(min(candidates, key=lambda o: abs(o.mean())))
+            if len(axes) == 2:
+                positions = [c0 + [ox, oy] for j, oy in enumerate(axes[1])
+                             for ox in (axes[0] if j % 2 == 0 else axes[0][::-1])]
+                overlap = 1.0
+                for p in positions:
+                    for height in (-self.args.below, self.args.max_height):
+                        H = plane_homography(Ksmall, self.V @ (p - c0), n, d - height)
+                        warped = cv2.warpPerspective(mask, H, (192, 108),
+                                                    flags=cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP)
+                        overlap = min(overlap, float(np.sum((mask > 0) & (warped > 0)) / max(mask.sum(), 1)))
+                if overlap >= self.args.min_overlap:
+                    for p in positions + [c0]:
+                        self.check_target(p)
+                        self.check_target(p - bc)  # запас на любой подход с выборкой люфта
+                    self.scan_plan = {"actual_step_mm": b, "min_pair_overlap": overlap,
+                                      "span_mm": np.ptp(positions, axis=0).tolist()}
+                    return positions
+            b *= 0.9
+            if b < 2:
+                break
+        raise Abort("не удалось разместить сетку с достаточным перекрытием; переместите камеру ближе к центру")
 
     def capture(self):
         """Усреднённый кадр (серый, float) после остановки: буфер вычитывается, станок успокаивается."""
@@ -468,7 +517,9 @@ class HeightTool(Survey):
         positions = self.plan_scan(c0)
         span = np.ptp(np.array(positions), axis=0)
         if not self.confirm(f"скан: {len(positions)} кадров, сетка {self.args.grid}x{self.args.grid} шаг "
-                            f"{self.args.baseline:g} мм (охват X {span[0]:.0f} Y {span[1]:.0f} мм) от X{c0[0]:.2f} "
+                            f"{self.scan_plan['actual_step_mm']:.2f} мм (запрошено {self.args.baseline:g}; "
+                            f"перекрытие >= {100 * self.scan_plan['min_pair_overlap']:.0f}%; "
+                            f"охват X {span[0]:.0f} Y {span[1]:.0f} мм) от X{c0[0]:.2f} "
                             f"Y{c0[1]:.2f}, подход с +, затем назад"):
             raise Abort("скан отменён")
         bc = self.backlash_comp
@@ -488,7 +539,8 @@ class HeightTool(Survey):
                 "camera_matrix": self.K.tolist(), "dist_coeffs": self.D.tolist(), "model": self.calib_model,
                 "V_cam": self.V.tolist(), "guess": {"n": guess[0].tolist(), "d": guess[1], "kind": guess[2]},
                 "global_plane": None if global_plane is None else {"n": global_plane[0].tolist(), "d": global_plane[1]},
-                "grid": self.args.grid, "baseline": self.args.baseline}
+                "grid": self.args.grid, "baseline": self.scan_plan['actual_step_mm'],
+                "requested_baseline": self.args.baseline, "scan_plan": self.scan_plan}
         folder = self.scans_dir / time.strftime("scan_%Y%m%d-%H%M%S")
         save_scan(folder, frames, shot_pos, ref_index, meta)
         self.say(f"кадры скана сохранены: {folder}")
@@ -580,8 +632,8 @@ class HeightTool(Survey):
 
 
 def add_height_args(ap):
-    ap.add_argument("--grid", type=int, default=3, help="скан: кадров по каждой оси (3 -> 9 кадров)")
-    ap.add_argument("--baseline", type=float, default=12.0,
+    ap.add_argument("--grid", type=int, default=5, help="скан: нечётное число кадров по оси (5 -> 25 кадров)")
+    ap.add_argument("--baseline", type=float, default=16.0,
                     help="скан: шаг между кадрами, мм (больше - точнее высота, но меньше общая зона кадров)")
     ap.add_argument("--scan-margin", type=float, default=5.0,
                     help="скан: насколько камере можно выходить за прямоугольник меток, мм")
@@ -591,6 +643,10 @@ def add_height_args(ap):
     ap.add_argument("--below", type=float, default=3.0, help="насколько ниже стола искать (пазы, ямки), мм")
     ap.add_argument("--sweep-step", type=float, default=0.25, help="шаг перебора высот для карты, мм")
     ap.add_argument("--map-views", type=int, default=0, help="кадров для карты (0 - все)")
+    ap.add_argument("--min-map-views", type=int, default=4, help="минимум дополнительных ракурсов для пикселя карты")
+    ap.add_argument("--min-overlap", type=float, default=0.35, help="минимальная доля перекрытия каждого кадра с опорным; шаг уменьшается автоматически")
+    ap.add_argument("--marker-grid", type=int, default=3, help="t: сетка замера меток, отдельно от скана объектов")
+    ap.add_argument("--marker-baseline", type=float, default=12.0, help="t: шаг замера меток, мм")
     ap.add_argument("--win", type=int, default=9, help="окно сравнения для карты, px (половинное разрешение)")
     ap.add_argument("--min-texture", type=float, default=2.0, help="минимальная текстура (СКО яркости в окне)")
     ap.add_argument("--min-score", type=float, default=0.5, help="минимальная корреляция кадров для карты")

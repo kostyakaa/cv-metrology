@@ -1,0 +1,32 @@
+[
+  {
+    "name": "triangulation_ideal_3d_mm",
+    "error": 1.5203165631859585e-14,
+    "tolerance": 1e-07
+  },
+  {
+    "name": "baseline_scale_gauge_1pct",
+    "error": 2.854979037260362e-14,
+    "tolerance": 1e-07
+  },
+  {
+    "name": "plane_homography_px",
+    "error": 0.0,
+    "tolerance": 1e-07
+  },
+  {
+    "name": "undistortion_roundtrip_normalized",
+    "error": 7.494005416219807e-14,
+    "tolerance": 1e-06
+  },
+  {
+    "name": "under_camera_xy_mm",
+    "error": 0.0,
+    "tolerance": 1e-07
+  },
+  {
+    "name": "plane_sweep_median_height_mm",
+    "error": 0.0007933378219604492,
+    "tolerance": 0.02
+  }
+]

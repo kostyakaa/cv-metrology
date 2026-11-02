@@ -1,0 +1,630 @@
+{
+  "source_files": 20,
+  "source_lines": 4623,
+  "opencv": "5.0.0",
+  "calibration": {
+    "calib_cam0_1920x1080_pinhole.json": {
+      "rms": 0.669285122755943,
+      "reliable": true,
+      "fx": 1101.9308341529518,
+      "views": 40
+    },
+    "calib_cam0_1920x1080_pinhole_rational.json": {
+      "rms": 0.5484726176648652,
+      "reliable": true,
+      "fx": 1100.2744931468765,
+      "views": 40
+    },
+    "calib_cam0_1920x1080_pinhole_unreliable.json": {
+      "rms": 0.5646001098516904,
+      "reliable": false,
+      "fx": 12533.954488472804,
+      "views": 25
+    },
+    "calib_cam0_640x480_pinhole_unreliable.json": {
+      "rms": 0.24382378190897283,
+      "reliable": false,
+      "fx": 4970.853504774175,
+      "views": 25
+    }
+  },
+  "scale_bias_percent": [
+    -0.6348568738843152,
+    -0.5253168046000622
+  ],
+  "command_over_true_percent": [
+    0.6389130573470236,
+    0.5280909551309332
+  ],
+  "error_at_100mm": [
+    -0.6348568738843152,
+    -0.5253168046000622
+  ],
+  "suggested_steps": [
+    805.1113044587762,
+    804.2247276410475
+  ],
+  "closure_norm_mm": 0.027140240616252018,
+  "closure_over_perimeter_percent": 0.0035993592901194223,
+  "mm_per_pixel": 0.07019884329315434,
+  "backlash_mm": [
+    0.06752599376740998,
+    0.02583470805918453
+  ],
+  "scans": [
+    {
+      "name": "scan_20261019-183900",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (13% кадра)",
+      "offset": -0.23619745671749115,
+      "objects": 15,
+      "near_29mm": 4
+    },
+    {
+      "name": "scan_20261019-184502",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (23% кадра)",
+      "offset": -0.11524125561118126,
+      "objects": 16,
+      "near_29mm": 1
+    },
+    {
+      "name": "scan_20261019-185038",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (11% кадра)",
+      "offset": -0.2800985127687454,
+      "objects": 15,
+      "near_29mm": 4
+    },
+    {
+      "name": "scan_20261019-185546",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (13% кадра)",
+      "offset": 1.5885380506515503,
+      "objects": 11,
+      "near_29mm": 0
+    },
+    {
+      "name": "scan_20261019-185902",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (14% кадра)",
+      "offset": -0.1519704908132553,
+      "objects": 20,
+      "near_29mm": 9
+    },
+    {
+      "name": "scan_20261019-190156",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "плоскость меток (стола в кадре мало)",
+      "offset": null,
+      "objects": 8,
+      "near_29mm": 1
+    },
+    {
+      "name": "scan_20261019-190516",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "плоскость меток (стола в кадре мало)",
+      "offset": null,
+      "objects": 13,
+      "near_29mm": 0
+    },
+    {
+      "name": "scan_20261019-190710",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (10% кадра)",
+      "offset": -0.20605459809303284,
+      "objects": 13,
+      "near_29mm": 4
+    },
+    {
+      "name": "scan_20261019-190915",
+      "frames": 9,
+      "baseline": 12.0,
+      "reference": "стол в кадре (10% кадра)",
+      "offset": -0.17358413338661194,
+      "objects": 14,
+      "near_29mm": 4
+    }
+  ],
+  "log_coverage_percent": [
+    38,
+    49,
+    38,
+    30,
+    42,
+    64,
+    57,
+    47,
+    42
+  ],
+  "log_points": [
+    {
+      "h": 0.057,
+      "sigma": 3.635,
+      "reliable": false
+    },
+    {
+      "h": -0.013,
+      "sigma": 0.199,
+      "reliable": false
+    },
+    {
+      "h": 16.712,
+      "sigma": 0.176,
+      "reliable": false
+    },
+    {
+      "h": 10.881,
+      "sigma": 0.333,
+      "reliable": false
+    },
+    {
+      "h": 12.456,
+      "sigma": 0.07,
+      "reliable": false
+    },
+    {
+      "h": 10.952,
+      "sigma": 0.177,
+      "reliable": false
+    },
+    {
+      "h": 12.45,
+      "sigma": 0.102,
+      "reliable": false
+    },
+    {
+      "h": 24.957,
+      "sigma": 0.064,
+      "reliable": false
+    },
+    {
+      "h": 24.948,
+      "sigma": 2.695,
+      "reliable": false
+    },
+    {
+      "h": 25.032,
+      "sigma": 0.141,
+      "reliable": false
+    },
+    {
+      "h": 24.915,
+      "sigma": 0.073,
+      "reliable": false
+    },
+    {
+      "h": 24.808,
+      "sigma": 0.1,
+      "reliable": false
+    },
+    {
+      "h": 24.421,
+      "sigma": 0.278,
+      "reliable": false
+    },
+    {
+      "h": 10.013,
+      "sigma": 3.3,
+      "reliable": false
+    },
+    {
+      "h": 24.444,
+      "sigma": 0.175,
+      "reliable": false
+    },
+    {
+      "h": 24.997,
+      "sigma": 0.126,
+      "reliable": false
+    },
+    {
+      "h": 18.195,
+      "sigma": 0.272,
+      "reliable": false
+    },
+    {
+      "h": 24.537,
+      "sigma": 0.217,
+      "reliable": false
+    },
+    {
+      "h": 24.214,
+      "sigma": 0.072,
+      "reliable": false
+    },
+    {
+      "h": 24.456,
+      "sigma": 0.071,
+      "reliable": false
+    },
+    {
+      "h": 24.934,
+      "sigma": 1.094,
+      "reliable": false
+    },
+    {
+      "h": 24.417,
+      "sigma": 0.169,
+      "reliable": false
+    },
+    {
+      "h": 24.436,
+      "sigma": 0.181,
+      "reliable": false
+    },
+    {
+      "h": 25.224,
+      "sigma": 3.39,
+      "reliable": false
+    },
+    {
+      "h": 24.994,
+      "sigma": 0.087,
+      "reliable": false
+    },
+    {
+      "h": 25.121,
+      "sigma": 0.147,
+      "reliable": false
+    },
+    {
+      "h": 25.152,
+      "sigma": 0.1,
+      "reliable": false
+    },
+    {
+      "h": 24.757,
+      "sigma": 0.09,
+      "reliable": false
+    },
+    {
+      "h": 0.023,
+      "sigma": 0.057,
+      "reliable": false
+    },
+    {
+      "h": 2.303,
+      "sigma": 0.043,
+      "reliable": true
+    },
+    {
+      "h": 1.57,
+      "sigma": 0.116,
+      "reliable": false
+    },
+    {
+      "h": 12.874,
+      "sigma": 0.096,
+      "reliable": false
+    },
+    {
+      "h": 1.213,
+      "sigma": 0.05,
+      "reliable": false
+    },
+    {
+      "h": -0.045,
+      "sigma": 0.084,
+      "reliable": false
+    },
+    {
+      "h": 0.984,
+      "sigma": 0.054,
+      "reliable": false
+    },
+    {
+      "h": 2.957,
+      "sigma": 0.0,
+      "reliable": false
+    },
+    {
+      "h": 0.02,
+      "sigma": 0.076,
+      "reliable": false
+    },
+    {
+      "h": 0.042,
+      "sigma": 0.064,
+      "reliable": false
+    },
+    {
+      "h": -0.13,
+      "sigma": 0.07,
+      "reliable": false
+    },
+    {
+      "h": -0.598,
+      "sigma": 0.192,
+      "reliable": false
+    },
+    {
+      "h": 0.013,
+      "sigma": 0.025,
+      "reliable": true
+    },
+    {
+      "h": 2.25,
+      "sigma": 0.093,
+      "reliable": false
+    },
+    {
+      "h": 13.038,
+      "sigma": 0.064,
+      "reliable": false
+    },
+    {
+      "h": 12.872,
+      "sigma": 0.073,
+      "reliable": false
+    },
+    {
+      "h": 1.911,
+      "sigma": 0.068,
+      "reliable": false
+    },
+    {
+      "h": 1.255,
+      "sigma": 0.056,
+      "reliable": false
+    },
+    {
+      "h": 1.963,
+      "sigma": 0.048,
+      "reliable": true
+    },
+    {
+      "h": 1.963,
+      "sigma": 0.048,
+      "reliable": true
+    },
+    {
+      "h": 1.964,
+      "sigma": 0.038,
+      "reliable": true
+    },
+    {
+      "h": 1.962,
+      "sigma": 0.039,
+      "reliable": true
+    },
+    {
+      "h": 1.962,
+      "sigma": 0.039,
+      "reliable": true
+    },
+    {
+      "h": 1.968,
+      "sigma": 0.039,
+      "reliable": true
+    },
+    {
+      "h": 2.359,
+      "sigma": 0.109,
+      "reliable": false
+    },
+    {
+      "h": 18.667,
+      "sigma": 0.024,
+      "reliable": true
+    },
+    {
+      "h": 18.484,
+      "sigma": 0.028,
+      "reliable": true
+    },
+    {
+      "h": 18.438,
+      "sigma": 0.068,
+      "reliable": false
+    },
+    {
+      "h": 13.032,
+      "sigma": 0.051,
+      "reliable": false
+    },
+    {
+      "h": 13.092,
+      "sigma": 0.045,
+      "reliable": true
+    },
+    {
+      "h": 13.276,
+      "sigma": 0.054,
+      "reliable": false
+    },
+    {
+      "h": 13.031,
+      "sigma": 0.062,
+      "reliable": false
+    },
+    {
+      "h": 10.219,
+      "sigma": 0.046,
+      "reliable": true
+    },
+    {
+      "h": 9.979,
+      "sigma": 0.024,
+      "reliable": true
+    },
+    {
+      "h": 9.905,
+      "sigma": 0.052,
+      "reliable": false
+    },
+    {
+      "h": 9.776,
+      "sigma": 0.055,
+      "reliable": false
+    },
+    {
+      "h": 9.899,
+      "sigma": 0.038,
+      "reliable": true
+    },
+    {
+      "h": 9.892,
+      "sigma": 0.037,
+      "reliable": true
+    },
+    {
+      "h": 9.952,
+      "sigma": 0.041,
+      "reliable": true
+    },
+    {
+      "h": 18.79,
+      "sigma": 0.26,
+      "reliable": false
+    },
+    {
+      "h": 10.031,
+      "sigma": 0.051,
+      "reliable": false
+    },
+    {
+      "h": 10.609,
+      "sigma": 3.204,
+      "reliable": false
+    },
+    {
+      "h": 14.277,
+      "sigma": 0.268,
+      "reliable": false
+    },
+    {
+      "h": 16.634,
+      "sigma": 0.222,
+      "reliable": false
+    },
+    {
+      "h": 9.848,
+      "sigma": 0.091,
+      "reliable": false
+    },
+    {
+      "h": 9.839,
+      "sigma": 0.051,
+      "reliable": false
+    },
+    {
+      "h": 9.835,
+      "sigma": 0.081,
+      "reliable": false
+    },
+    {
+      "h": 1.862,
+      "sigma": 0.277,
+      "reliable": false
+    },
+    {
+      "h": 9.078,
+      "sigma": 0.189,
+      "reliable": false
+    },
+    {
+      "h": 10.1,
+      "sigma": 0.069,
+      "reliable": false
+    }
+  ],
+  "depth_sensitivity": [
+    {
+      "baseline": 6,
+      "sigma_disparity_px": 0.05,
+      "sigma_z_mm": 0.04518348356913572
+    },
+    {
+      "baseline": 6,
+      "sigma_disparity_px": 0.1,
+      "sigma_z_mm": 0.09036696713827144
+    },
+    {
+      "baseline": 6,
+      "sigma_disparity_px": 0.2,
+      "sigma_z_mm": 0.18073393427654288
+    },
+    {
+      "baseline": 12,
+      "sigma_disparity_px": 0.05,
+      "sigma_z_mm": 0.02259174178456786
+    },
+    {
+      "baseline": 12,
+      "sigma_disparity_px": 0.1,
+      "sigma_z_mm": 0.04518348356913572
+    },
+    {
+      "baseline": 12,
+      "sigma_disparity_px": 0.2,
+      "sigma_z_mm": 0.09036696713827144
+    },
+    {
+      "baseline": 24,
+      "sigma_disparity_px": 0.05,
+      "sigma_z_mm": 0.01129587089228393
+    },
+    {
+      "baseline": 24,
+      "sigma_disparity_px": 0.1,
+      "sigma_z_mm": 0.02259174178456786
+    },
+    {
+      "baseline": 24,
+      "sigma_disparity_px": 0.2,
+      "sigma_z_mm": 0.04518348356913572
+    }
+  ],
+  "redetected_motion": {
+    "views": 25,
+    "real_per_cmd_x": 0.9936514312611568,
+    "real_per_cmd_y": 0.9947468319539994,
+    "axes_angle_deg": 89.99002911605503,
+    "board_rotation_deg": 89.29661334425177,
+    "residual_rms_mm": 0.014254602574542172,
+    "camera_height_mm": 70.28487034688719,
+    "motion": {
+      "V_cam": [
+        [
+          -0.9936322509663917,
+          -0.0043213939106735945
+        ],
+        [
+          -0.0041145899659074175,
+          0.994721458902937
+        ],
+        [
+          -0.004843567196995909,
+          0.00570922740378453
+        ]
+      ],
+      "normal_cam": [
+        -0.004850615533121958,
+        -0.005760433619326047,
+        0.9999716440647041
+      ],
+      "camera_tilt_deg": 0.431479974927462,
+      "board_tilt_to_motion_deg": 0.1008989473005649,
+      "board_distance_mm": 70.2847613636395,
+      "distance_resid_rms_mm": 0.008948096159844229,
+      "pose_rotation_spread_deg": 0.10004342710434483,
+      "note": "V_cam: сдвиг камеры в её осях (x вправо, y вниз по кадру, z по оси объектива), мм на 1 мм команды X / Y; normal_cam - нормаль плоскости хода (от камеры)"
+    }
+  },
+  "grid_analysis": {
+    "n": 25,
+    "fit_rms_mm": 0.014254602574542172,
+    "leave_one_out_rms_mm": 0.016425947942643255,
+    "max_residual_mm": 0.02385096129546579,
+    "note": "K,D fixed from same dataset; LOO validates affine motion only, not independent accuracy."
+  }
+}

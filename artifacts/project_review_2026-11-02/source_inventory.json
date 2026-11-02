@@ -1,0 +1,1085 @@
+[
+  {
+    "path": "common/__init__.py",
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "functions": []
+  },
+  {
+    "path": "common/camera.py",
+    "lines": 113,
+    "sha256": "ab1f476e98277b571f5d81b5e30d403fb22916bb9db4180ac0ca2eddb1acd786",
+    "functions": [
+      {
+        "name": "fourcc_to_str",
+        "line": 11
+      },
+      {
+        "name": "params_path",
+        "line": 17
+      },
+      {
+        "name": "load_saved_focus",
+        "line": 21
+      },
+      {
+        "name": "save_focus",
+        "line": 32
+      },
+      {
+        "name": "set_focus",
+        "line": 42
+      },
+      {
+        "name": "open_camera",
+        "line": 48
+      },
+      {
+        "name": "read_frame",
+        "line": 89
+      },
+      {
+        "name": "grab_fresh",
+        "line": 98
+      },
+      {
+        "name": "sharpness",
+        "line": 111
+      }
+    ]
+  },
+  {
+    "path": "common/display.py",
+    "lines": 114,
+    "sha256": "1b509ec492a17262340f51d8f5d08b6a3147d13dc16b0b95a2221ccd836396c0",
+    "functions": [
+      {
+        "name": "add_zoom_trackbar",
+        "line": 18
+      },
+      {
+        "name": "get_zoom",
+        "line": 22
+      },
+      {
+        "name": "show_scaled",
+        "line": 26
+      },
+      {
+        "name": "text_style",
+        "line": 35
+      },
+      {
+        "name": "text_px",
+        "line": 41
+      },
+      {
+        "name": "_font",
+        "line": 46
+      },
+      {
+        "name": "draw_texts",
+        "line": 59
+      },
+      {
+        "name": "draw_marker",
+        "line": 81
+      },
+      {
+        "name": "MarkerHold",
+        "line": 102
+      },
+      {
+        "name": "__init__",
+        "line": 105
+      },
+      {
+        "name": "update",
+        "line": 108
+      }
+    ]
+  },
+  {
+    "path": "common/focus.py",
+    "lines": 74,
+    "sha256": "da75ab2158316046c99eccb2f4c1f09a7b53ba3a6258b11d3ca1f784583ee721",
+    "functions": [
+      {
+        "name": "FocusAborted",
+        "line": 16
+      },
+      {
+        "name": "center_roi",
+        "line": 20
+      },
+      {
+        "name": "roi_around",
+        "line": 26
+      },
+      {
+        "name": "measure",
+        "line": 36
+      },
+      {
+        "name": "autofocus",
+        "line": 47
+      },
+      {
+        "name": "scan",
+        "line": 53
+      }
+    ]
+  },
+  {
+    "path": "common/geometry.py",
+    "lines": 93,
+    "sha256": "68c89655bc9a56137375136e87cb99e085eab978fea0810a271baa1cc493f8ac",
+    "functions": [
+      {
+        "name": "undistort_points",
+        "line": 14
+      },
+      {
+        "name": "mean_rotation",
+        "line": 26
+      },
+      {
+        "name": "machine_motion",
+        "line": 35
+      }
+    ]
+  },
+  {
+    "path": "common/grbl.py",
+    "lines": 178,
+    "sha256": "a39576c715cc0e22cb3be82aa82ad21d5c0d90eb044bfdadc2f89bac5cebb806",
+    "functions": [
+      {
+        "name": "GrblError",
+        "line": 14
+      },
+      {
+        "name": "GrblAborted",
+        "line": 18
+      },
+      {
+        "name": "Grbl",
+        "line": 22
+      },
+      {
+        "name": "__init__",
+        "line": 23
+      },
+      {
+        "name": "_readline",
+        "line": 39
+      },
+      {
+        "name": "_handle_async",
+        "line": 43
+      },
+      {
+        "name": "_wait_banner",
+        "line": 52
+      },
+      {
+        "name": "cmd",
+        "line": 66
+      },
+      {
+        "name": "_parse_status",
+        "line": 82
+      },
+      {
+        "name": "status",
+        "line": 91
+      },
+      {
+        "name": "position",
+        "line": 104
+      },
+      {
+        "name": "require_idle",
+        "line": 114
+      },
+      {
+        "name": "jog",
+        "line": 119
+      },
+      {
+        "name": "wait_idle",
+        "line": 125
+      },
+      {
+        "name": "cancel",
+        "line": 141
+      },
+      {
+        "name": "settings",
+        "line": 149
+      },
+      {
+        "name": "unlock",
+        "line": 169
+      },
+      {
+        "name": "set_work_zero_here",
+        "line": 172
+      },
+      {
+        "name": "close",
+        "line": 176
+      }
+    ]
+  },
+  {
+    "path": "common/markers.py",
+    "lines": 74,
+    "sha256": "12cbf395fad5fa702f9f022de166e6ba93614354e2dcc60ccac794035deaa353",
+    "functions": [
+      {
+        "name": "make_charuco_board",
+        "line": 27
+      },
+      {
+        "name": "get_dictionary",
+        "line": 32
+      },
+      {
+        "name": "make_detector",
+        "line": 36
+      },
+      {
+        "name": "detect",
+        "line": 49
+      },
+      {
+        "name": "detect_precise",
+        "line": 57
+      }
+    ]
+  },
+  {
+    "path": "scripts/autofocus.py",
+    "lines": 125,
+    "sha256": "7fcde9d2c746246b8cf6705f637e9430b2cb97e126175983d9c07a90e58ea1c0",
+    "functions": [
+      {
+        "name": "render_curve",
+        "line": 37
+      },
+      {
+        "name": "main",
+        "line": 66
+      },
+      {
+        "name": "to_xy",
+        "line": 49
+      },
+      {
+        "name": "run",
+        "line": 83
+      }
+    ]
+  },
+  {
+    "path": "scripts/calibrate_distortion.py",
+    "lines": 565,
+    "sha256": "1b409413f3bc4bc09ef63118ec3314900cde9b563e02651044b7797df971ad27",
+    "functions": [
+      {
+        "name": "detect_board",
+        "line": 76
+      },
+      {
+        "name": "average_detections",
+        "line": 85
+      },
+      {
+        "name": "covered_cells",
+        "line": 100
+      },
+      {
+        "name": "Capture",
+        "line": 106
+      },
+      {
+        "name": "views_from_dir",
+        "line": 268
+      },
+      {
+        "name": "per_view_errors",
+        "line": 286
+      },
+      {
+        "name": "calibrate_pinhole",
+        "line": 294
+      },
+      {
+        "name": "reliability",
+        "line": 306
+      },
+      {
+        "name": "calibrate_fisheye",
+        "line": 334
+      },
+      {
+        "name": "machine_check",
+        "line": 354
+      },
+      {
+        "name": "print_camera_report",
+        "line": 376
+      },
+      {
+        "name": "save_calib",
+        "line": 395
+      },
+      {
+        "name": "live_undistort",
+        "line": 403
+      },
+      {
+        "name": "main",
+        "line": 429
+      },
+      {
+        "name": "__init__",
+        "line": 107
+      },
+      {
+        "name": "preview",
+        "line": 116
+      },
+      {
+        "name": "render",
+        "line": 124
+      },
+      {
+        "name": "show",
+        "line": 147
+      },
+      {
+        "name": "tick",
+        "line": 151
+      },
+      {
+        "name": "confirm",
+        "line": 156
+      },
+      {
+        "name": "add_view",
+        "line": 168
+      },
+      {
+        "name": "capture_manual",
+        "line": 184
+      },
+      {
+        "name": "drain",
+        "line": 191
+      },
+      {
+        "name": "auto_grid",
+        "line": 196
+      },
+      {
+        "name": "run",
+        "line": 247
+      },
+      {
+        "name": "close",
+        "line": 262
+      }
+    ]
+  },
+  {
+    "path": "scripts/camera_params.py",
+    "lines": 177,
+    "sha256": "124362858e3ca5b33e57559a648059bd5acf9a5950c87a357ec712f33ec02d39",
+    "functions": [
+      {
+        "name": "clamp",
+        "line": 58
+      },
+      {
+        "name": "nothing",
+        "line": 62
+      },
+      {
+        "name": "main",
+        "line": 66
+      },
+      {
+        "name": "apply_changed",
+        "line": 90
+      },
+      {
+        "name": "sync_trackbars_from_camera",
+        "line": 99
+      }
+    ]
+  },
+  {
+    "path": "scripts/compare_modes.py",
+    "lines": 200,
+    "sha256": "d811278a6a4928f30806c9b9054055bbba0e8ca3e481b31d7fc3e953dae05988",
+    "functions": [
+      {
+        "name": "parse_mode",
+        "line": 51
+      },
+      {
+        "name": "modes_from_directshow",
+        "line": 57
+      },
+      {
+        "name": "measure_mode",
+        "line": 73
+      },
+      {
+        "name": "fit_mode_to_ref",
+        "line": 96
+      },
+      {
+        "name": "main",
+        "line": 112
+      }
+    ]
+  },
+  {
+    "path": "scripts/detect_markers.py",
+    "lines": 171,
+    "sha256": "a46e0cd388b801c5c4511590bc7554da5fde05c57f103a1a9c1cc1ac0cdea0e4",
+    "functions": [
+      {
+        "name": "describe",
+        "line": 44
+      },
+      {
+        "name": "main",
+        "line": 55
+      },
+      {
+        "name": "focus_tick",
+        "line": 81
+      }
+    ]
+  },
+  {
+    "path": "scripts/detect_point.py",
+    "lines": 276,
+    "sha256": "23ede19b9c66a50146b20414eb19a12cb16139c78aa9863dbe0b39ca609466ae",
+    "functions": [
+      {
+        "name": "draw_center_offset",
+        "line": 48
+      },
+      {
+        "name": "run_blob",
+        "line": 61
+      },
+      {
+        "name": "run_template",
+        "line": 153
+      },
+      {
+        "name": "main",
+        "line": 252
+      },
+      {
+        "name": "on_mouse",
+        "line": 160
+      },
+      {
+        "name": "parab",
+        "line": 218
+      }
+    ]
+  },
+  {
+    "path": "scripts/list_cameras.py",
+    "lines": 63,
+    "sha256": "a10e64a436f131cc86a976c3a652d187b34debfb0ca09832b8ef8a60f205ab30",
+    "functions": [
+      {
+        "name": "main",
+        "line": 18
+      }
+    ]
+  },
+  {
+    "path": "scripts/list_formats.py",
+    "lines": 68,
+    "sha256": "c1cf61a3a015f6c6dd9011423fc08a19b009dbd2fbe70aaca0613b9606f41c6d",
+    "functions": [
+      {
+        "name": "describe",
+        "line": 31
+      },
+      {
+        "name": "main",
+        "line": 36
+      }
+    ]
+  },
+  {
+    "path": "scripts/make_chessboard.py",
+    "lines": 194,
+    "sha256": "0deb4bde5f0c915d7c3572d9fda2af57b783b7a1a4608dab4301b26f3af6017a",
+    "functions": [
+      {
+        "name": "exact_px_per_mm",
+        "line": 46
+      },
+      {
+        "name": "raster_to_rects",
+        "line": 55
+      },
+      {
+        "name": "board_rects",
+        "line": 75
+      },
+      {
+        "name": "describe",
+        "line": 84
+      },
+      {
+        "name": "text",
+        "line": 91
+      },
+      {
+        "name": "ruler",
+        "line": 96
+      },
+      {
+        "name": "page",
+        "line": 106
+      },
+      {
+        "name": "build_single",
+        "line": 118
+      },
+      {
+        "name": "build_small_sheet",
+        "line": 130
+      },
+      {
+        "name": "rasterize",
+        "line": 163
+      },
+      {
+        "name": "save",
+        "line": 172
+      },
+      {
+        "name": "main",
+        "line": 180
+      }
+    ]
+  },
+  {
+    "path": "scripts/make_markers.py",
+    "lines": 154,
+    "sha256": "ea5bcd9b0cfa7bbe7927037d6acdc4cb0115277e1fadc45ff8f0af12ec27ff71",
+    "functions": [
+      {
+        "name": "marker_modules",
+        "line": 45
+      },
+      {
+        "name": "module_path",
+        "line": 50
+      },
+      {
+        "name": "build",
+        "line": 58
+      },
+      {
+        "name": "rasterize",
+        "line": 128
+      },
+      {
+        "name": "main",
+        "line": 138
+      }
+    ]
+  },
+  {
+    "path": "scripts/survey_markers.py",
+    "lines": 908,
+    "sha256": "5f3f27b30fe8e5978d3c13eeec8883f6c9b743f26cb9a690d864f30befdf4ea2",
+    "functions": [
+      {
+        "name": "Abort",
+        "line": 66
+      },
+      {
+        "name": "unit",
+        "line": 70
+      },
+      {
+        "name": "angle_deg",
+        "line": 75
+      },
+      {
+        "name": "marker_scale",
+        "line": 79
+      },
+      {
+        "name": "fmt_move",
+        "line": 85
+      },
+      {
+        "name": "axis_deviation",
+        "line": 89
+      },
+      {
+        "name": "find_calibration",
+        "line": 95
+      },
+      {
+        "name": "WindowUI",
+        "line": 117
+      },
+      {
+        "name": "Survey",
+        "line": 135
+      },
+      {
+        "name": "add_survey_args",
+        "line": 823
+      },
+      {
+        "name": "main",
+        "line": 859
+      },
+      {
+        "name": "__init__",
+        "line": 118
+      },
+      {
+        "name": "show",
+        "line": 125
+      },
+      {
+        "name": "__init__",
+        "line": 136
+      },
+      {
+        "name": "say",
+        "line": 185
+      },
+      {
+        "name": "undistort",
+        "line": 189
+      },
+      {
+        "name": "render",
+        "line": 195
+      },
+      {
+        "name": "tick",
+        "line": 238
+      },
+      {
+        "name": "wait_key",
+        "line": 244
+      },
+      {
+        "name": "confirm",
+        "line": 248
+      },
+      {
+        "name": "ask_direction",
+        "line": 260
+      },
+      {
+        "name": "measure_all",
+        "line": 272
+      },
+      {
+        "name": "measure",
+        "line": 286
+      },
+      {
+        "name": "require_marker",
+        "line": 299
+      },
+      {
+        "name": "real_ratio",
+        "line": 307
+      },
+      {
+        "name": "position",
+        "line": 314
+      },
+      {
+        "name": "expected",
+        "line": 317
+      },
+      {
+        "name": "envelope",
+        "line": 327
+      },
+      {
+        "name": "check_target",
+        "line": 332
+      },
+      {
+        "name": "require_grbl",
+        "line": 339
+      },
+      {
+        "name": "move",
+        "line": 343
+      },
+      {
+        "name": "move_approach",
+        "line": 363
+      },
+      {
+        "name": "load_layout",
+        "line": 378
+      },
+      {
+        "name": "check_settings",
+        "line": 391
+      },
+      {
+        "name": "connect",
+        "line": 411
+      },
+      {
+        "name": "unlock",
+        "line": 427
+      },
+      {
+        "name": "jog_key",
+        "line": 433
+      },
+      {
+        "name": "focus_on_marker",
+        "line": 438
+      },
+      {
+        "name": "calibrate_axes",
+        "line": 461
+      },
+      {
+        "name": "report_axes",
+        "line": 497
+      },
+      {
+        "name": "invert_axes",
+        "line": 544
+      },
+      {
+        "name": "center_on",
+        "line": 566
+      },
+      {
+        "name": "record",
+        "line": 604
+      },
+      {
+        "name": "center_and_record",
+        "line": 612
+      },
+      {
+        "name": "verify_direction",
+        "line": 615
+      },
+      {
+        "name": "travel_to_point",
+        "line": 631
+      },
+      {
+        "name": "travel_to",
+        "line": 645
+      },
+      {
+        "name": "explore_leg",
+        "line": 659
+      },
+      {
+        "name": "find_new_marker",
+        "line": 690
+      },
+      {
+        "name": "run_survey",
+        "line": 697
+      },
+      {
+        "name": "home_id",
+        "line": 732
+      },
+      {
+        "name": "table_frame",
+        "line": 735
+      },
+      {
+        "name": "save_frame",
+        "line": 762
+      },
+      {
+        "name": "go_home",
+        "line": 803
+      },
+      {
+        "name": "set_zero",
+        "line": 809
+      },
+      {
+        "name": "real",
+        "line": 744
+      }
+    ]
+  },
+  {
+    "path": "z/measure_height.py",
+    "lines": 695,
+    "sha256": "0c2174c6dd0c446aa3397b1646af518fcd3d6ee7b8066ff78a7ad678fc166a4c",
+    "functions": [
+      {
+        "name": "ScanResult",
+        "line": 62
+      },
+      {
+        "name": "save_scan",
+        "line": 195
+      },
+      {
+        "name": "load_scan",
+        "line": 203
+      },
+      {
+        "name": "MapWindow",
+        "line": 210
+      },
+      {
+        "name": "HeightTool",
+        "line": 233
+      },
+      {
+        "name": "add_height_args",
+        "line": 582
+      },
+      {
+        "name": "run_offline",
+        "line": 608
+      },
+      {
+        "name": "main",
+        "line": 639
+      },
+      {
+        "name": "__init__",
+        "line": 65
+      },
+      {
+        "name": "table_height_at",
+        "line": 125
+      },
+      {
+        "name": "measure",
+        "line": 132
+      },
+      {
+        "name": "render",
+        "line": 153
+      },
+      {
+        "name": "report",
+        "line": 179
+      },
+      {
+        "name": "to_json",
+        "line": 189
+      },
+      {
+        "name": "__init__",
+        "line": 213
+      },
+      {
+        "name": "_on_mouse",
+        "line": 219
+      },
+      {
+        "name": "show",
+        "line": 224
+      },
+      {
+        "name": "take_click",
+        "line": 227
+      },
+      {
+        "name": "__init__",
+        "line": 234
+      },
+      {
+        "name": "calibrate_axes",
+        "line": 262
+      },
+      {
+        "name": "check_motion",
+        "line": 267
+      },
+      {
+        "name": "load_table_plane",
+        "line": 289
+      },
+      {
+        "name": "table_plane_here",
+        "line": 298
+      },
+      {
+        "name": "record",
+        "line": 317
+      },
+      {
+        "name": "measure_marker_3d",
+        "line": 322
+      },
+      {
+        "name": "measure_table_plane",
+        "line": 364
+      },
+      {
+        "name": "save_table_plane",
+        "line": 382
+      },
+      {
+        "name": "plan_scan",
+        "line": 422
+      },
+      {
+        "name": "capture",
+        "line": 449
+      },
+      {
+        "name": "scan_here",
+        "line": 463
+      },
+      {
+        "name": "plane_guess",
+        "line": 509
+      },
+      {
+        "name": "sweep_tick",
+        "line": 518
+      },
+      {
+        "name": "show_map",
+        "line": 524
+      },
+      {
+        "name": "handle_click",
+        "line": 528
+      },
+      {
+        "name": "go_selected",
+        "line": 542
+      },
+      {
+        "name": "check_selected",
+        "line": 556
+      },
+      {
+        "name": "focus_on_marker",
+        "line": 578
+      }
+    ]
+  },
+  {
+    "path": "z/stereo.py",
+    "lines": 381,
+    "sha256": "cd4b6d62ed52342a9c273661f3f9ddefcae5834766fdb95abbb4e0a7fdaeeb7a",
+    "functions": [
+      {
+        "name": "SweepAborted",
+        "line": 23
+      },
+      {
+        "name": "find_frames_dir",
+        "line": 28
+      },
+      {
+        "name": "load_motion",
+        "line": 47
+      },
+      {
+        "name": "motion_normal",
+        "line": 82
+      },
+      {
+        "name": "under_camera",
+        "line": 87
+      },
+      {
+        "name": "Rectifier",
+        "line": 94
+      },
+      {
+        "name": "half",
+        "line": 111
+      },
+      {
+        "name": "plane_homography",
+        "line": 122
+      },
+      {
+        "name": "plane_sweep",
+        "line": 128
+      },
+      {
+        "name": "points_from_heights",
+        "line": 189
+      },
+      {
+        "name": "fit_plane",
+        "line": 198
+      },
+      {
+        "name": "local_table",
+        "line": 206
+      },
+      {
+        "name": "_sample",
+        "line": 230
+      },
+      {
+        "name": "_peak",
+        "line": 242
+      },
+      {
+        "name": "refine_point",
+        "line": 251
+      },
+      {
+        "name": "triangulate",
+        "line": 305
+      },
+      {
+        "name": "find_objects",
+        "line": 339
+      },
+      {
+        "name": "colorize",
+        "line": 371
+      },
+      {
+        "name": "__init__",
+        "line": 97
+      },
+      {
+        "name": "__call__",
+        "line": 107
+      },
+      {
+        "name": "box",
+        "line": 137
+      }
+    ]
+  }
+]

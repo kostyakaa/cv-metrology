@@ -1,0 +1,4 @@
+﻿Slide 1: Text 3, bound=55.2, height=51.84
+Slide 5: Text 9, bound=120, height=115.2
+Slide 8: Text 3, bound=79.2, height=64.8
+Slide 9: Text 5, bound=79.2, height=72
