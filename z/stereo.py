@@ -10,6 +10,8 @@ import json
 import os
 import sys
 import types
+import threading
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 
 import cv2
@@ -126,55 +128,141 @@ def plane_homography(K, O, n, d):
 
 # ---------- плотная карта: перебор плоскостей, параллельных опорной
 def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid=None, win=9, min_std=2.0,
-                min_score=0.5, min_views=2, tick=None):
+                min_score=0.5, min_views=2, tick=None, workers=None, strip=None):
     """Для каждого пикселя опорного кадра - высота h над плоскостью n·X = d0, при которой остальные кадры,
     перенесённые через плоскость n·X = d0 - h, лучше всего совпадают с опорным (средняя ZNCC в окне win).
-    Возвращает (карта высот с NaN где не определилась, лучшая корреляция, маска достоверных)."""
+    Возвращает (карта высот с NaN где не определилась, лучшая корреляция, маска достоверных).
+    workers - потоков (по умолчанию min(ядер, 8)), strip - строк в полосе (по умолчанию кадр / workers).
+    tick(i, n) вызывается из вызывающего потока; True - прервать (SweepAborted)."""
     hh, ww = ref.shape
-    size = (ww, hh)
-    ref = ref.astype(np.float32)
+    r = win // 2
+    var_floor = np.float32(min_std ** 2)
 
     def box(a):
         return cv2.boxFilter(a, cv2.CV_32F, (win, win), borderType=cv2.BORDER_REFLECT)
 
+    # Яркость - от среднего кадра: ZNCC от сдвига яркости не зависит, а дисперсия как box(x²) - box(x)² во
+    # float32 при яркостях ~200 теряет точность (вычитание близких ~4e4) - на однотонных местах это давало
+    # "корреляцию" > 1, и такой мусор выигрывал перебор высот.
+    ref = ref.astype(np.float32)
+    ref = ref - np.float32(ref.mean())
     mr = box(ref)
     vr = np.maximum(box(ref * ref) - mr * mr, 0)
-    texture = vr > min_std ** 2
+    texture = vr > var_floor
     if ref_valid is not None:
         texture &= cv2.erode(ref_valid.astype(np.uint8), np.ones((win, win), np.uint8)) > 0
-    masks = [(np.ones_like(ref) if m is None else m.astype(np.float32))
-             for m in (others_valid or [None] * len(others))]
-    others = [o.astype(np.float32) for o in others]
+    inv_sd = (1 / np.sqrt(np.maximum(vr, var_floor))).astype(np.float32)
+    # Маска "окно целиком в данных" не зависит от уровня высоты - эрозия один раз на кадр, на уровне только
+    # перенос (uint8, ближайший сосед; для переноса это то же, что box(перенесённая маска) == 1).
+    kernel = np.ones((win, win), np.uint8)
+    imgs, wins = [], []
+    for img, m in zip(others, others_valid or [None] * len(others)):
+        img = img.astype(np.float32)
+        m = np.ones(img.shape, np.uint8) if m is None else m.astype(np.uint8)
+        imgs.append(img - np.float32(img[m > 0].mean() if m.any() else img.mean()))
+        wins.append(cv2.erode(m, kernel, borderType=cv2.BORDER_CONSTANT, borderValue=0))
     Kinv = np.linalg.inv(K)
+    heights = np.asarray(heights, float)
+    nl = len(heights)
+    # гомографии (выход -> вход) для каждого уровня и кадра
+    Hs = [[K @ (np.eye(3) - np.outer(O, n) / (d0 - h)) @ Kinv for O in Os] for h in heights]
+    lin = cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP
+    near = cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP
+
     best = np.full((hh, ww), -2, np.float32)
     best_i = np.full((hh, ww), -1, np.int32)
-    s_prev = np.full((hh, ww), -2, np.float32)
-    s_before = s_prev.copy()
-    s_after = s_prev.copy()
-    heights = np.asarray(heights, float)
-    for i, h in enumerate(heights):
-        acc = np.zeros((hh, ww), np.float32)
-        cnt = np.zeros((hh, ww), np.float32)
-        for img, O, m in zip(others, Os, masks):
-            H = K @ (np.eye(3) - np.outer(O, n) / (d0 - h)) @ Kinv
-            w = cv2.warpPerspective(img, H, size, flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
-            ok = box(cv2.warpPerspective(m, H, size, flags=cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP)) > 0.999
-            mw = box(w)
-            vw = np.maximum(box(w * w) - mw * mw, 0)
-            ncc = (box(ref * w) - mr * mw) / np.sqrt(vr * vw + 1e-3)
-            acc += np.where(ok, ncc, 0)
-            cnt += ok
-        s = np.where(cnt >= min_views, acc / np.maximum(cnt, 1), -2).astype(np.float32)
-        if i > 0:
-            m = best_i == i - 1
-            s_after[m] = s[m]
-        better = s > best
-        s_before[better] = s_prev[better]
-        best[better] = s[better]
-        best_i[better] = i
-        s_prev = s
-        if tick is not None and tick(i + 1, len(heights)):
-            raise SweepAborted()
+    s_before = best.copy()
+    s_after = best.copy()
+
+    # Кадр режется на горизонтальные полосы, каждая считается целиком (все уровни, все кадры) в своём потоке.
+    # Полоса - с запасом r строк сверху и снизу: окна её строк видят настоящих соседей, результат тот же, что по
+    # целому кадру. Буферы полосы выделяются один раз и небольшие (кэш процессора), OpenCV и numpy на время
+    # счёта отпускают GIL. Внутренний пул потоков OpenCV на это время выключен: на мелких вызовах он только
+    # крутится вхолостую и мешает.
+    # Больше 8 потоков не ускоряет (упирается в память и GIL); полос - по одной на поток.
+    workers = max(1, int(workers or min(os.cpu_count() or 1, 8)))
+    strip = max(int(strip or -(-hh // workers)), 2 * r + 1)
+    bands = [(y0, min(y0 + strip, hh)) for y0 in range(0, hh, strip)]
+    bands = [bd for bd in bands if texture[bd[0]:bd[1]].any()]  # без текстуры карта всё равно пустая
+    progress = [0] * len(bands)
+    stop = threading.Event()
+
+    def run_band(k, y0, y1):
+        a, b = max(0, y0 - r), min(hh, y1 + r)
+        rows = b - a
+        sz = (ww, rows)
+        T = np.array([[1, 0, 0], [0, 1, a], [0, 0, 1]], float)  # строка полосы -> строка кадра
+        Hb = [[H @ T for H in Hl] for Hl in Hs]
+        ref_s, mr_s, isd_s = ref[a:b], mr[a:b], inv_sd[a:b]
+        o, m_rows = y0 - a, y1 - y0
+        bst = np.full((m_rows, ww), -2, np.float32)
+        bi = np.full((m_rows, ww), -1, np.int32)
+        sp, sb, sa = bst.copy(), bst.copy(), bst.copy()
+        f32 = lambda: np.empty((rows, ww), np.float32)  # noqa: E731
+        w, ok, ww2, rw, t1, t2, acc = f32(), np.empty((rows, ww), np.uint8), f32(), f32(), f32(), f32(), f32()
+        cnt = np.empty((rows, ww), np.uint8)
+        sc = np.empty((m_rows, ww), np.float32)
+        for i in range(nl):
+            if stop.is_set():
+                return
+            acc[:] = 0
+            cnt[:] = 0
+            for img, m_win, H in zip(imgs, wins, Hb[i]):
+                cv2.warpPerspective(img, H, sz, dst=w, flags=lin)
+                cv2.warpPerspective(m_win, H, sz, dst=ok, flags=near)
+                np.multiply(w, w, out=ww2)
+                np.multiply(ref_s, w, out=rw)
+                mw, bww, brw = cv2.split(box(cv2.merge([w, ww2, rw])))  # box(w), box(w²), box(ref·w) - за проход
+                # vw = max(box(w²) - mw², min_std²): однотонное окно против текстурного - ncc ~ 0
+                np.multiply(mw, mw, out=t1)
+                np.subtract(bww, t1, out=t1)
+                np.maximum(t1, var_floor, out=t1)
+                np.sqrt(t1, out=t1)
+                np.multiply(mr_s, mw, out=t2)
+                np.subtract(brw, t2, out=t2)
+                np.multiply(t2, isd_s, out=t2)
+                np.divide(t2, t1, out=t2)
+                np.clip(t2, -1, 1, out=t2)
+                cv2.add(acc, t2, dst=acc, mask=ok)
+                cv2.add(cnt, 1, dst=cnt, mask=ok)
+            a_s, c_s = acc[o:o + m_rows], cnt[o:o + m_rows]
+            np.divide(a_s, np.maximum(c_s, 1), out=sc)
+            sc[c_s < min_views] = -2
+            if i > 0:
+                m = bi == i - 1
+                sa[m] = sc[m]
+            better = sc > bst
+            sb[better] = sp[better]
+            bst[better] = sc[better]
+            bi[better] = i
+            sp, sc = sc, sp  # sc перезаписывается на следующем уровне - меняем буферы местами
+            progress[k] = i + 1
+        best[y0:y1], best_i[y0:y1], s_before[y0:y1], s_after[y0:y1] = bst, bi, sb, sa
+
+    workers = min(workers, len(bands) or 1)
+    cv_threads = cv2.getNumThreads()
+    cv2.setNumThreads(1)
+    try:
+        with ThreadPoolExecutor(workers) as pool:
+            futs = [pool.submit(run_band, k, y0, y1) for k, (y0, y1) in enumerate(bands)]
+            try:
+                shown = 0
+                while True:
+                    done, _ = wait(futs, timeout=0.05)
+                    for f in done:
+                        f.result()  # ошибка в потоке - сразу наружу
+                    level = sum(progress) // len(bands) if bands else nl
+                    if tick is not None:
+                        for j in range(shown + 1, level + 1):
+                            if tick(j, nl):
+                                raise SweepAborted()
+                    shown = max(shown, level)
+                    if len(done) == len(futs):
+                        break
+            finally:
+                stop.set()
+    finally:
+        cv2.setNumThreads(cv_threads)
     step = heights[1] - heights[0]
     den = s_before - 2 * best + s_after
     with np.errstate(divide="ignore", invalid="ignore"):

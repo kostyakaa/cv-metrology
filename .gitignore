@@ -1,3 +1,5 @@
 __pycache__/
 .claude/
 .vscode/
+graphify-out
+.graphify-corpus
