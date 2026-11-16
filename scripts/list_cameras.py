@@ -11,8 +11,13 @@
     q/ESC   - выход полностью
 """
 import argparse
+import sys
 
 import cv2
+
+cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+
+DEFAULT_BACKEND = cv2.CAP_DSHOW if sys.platform.startswith("win") else cv2.CAP_V4L2
 
 
 def main():
@@ -22,7 +27,7 @@ def main():
 
     found_any = False
     for idx in range(args.max_index + 1):
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(idx, DEFAULT_BACKEND)
         if not cap.isOpened():
             cap.release()
             continue

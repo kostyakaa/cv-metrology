@@ -1,11 +1,14 @@
-"""Общие утилиты для работы с камерой через OpenCV (Windows, backend DSHOW)."""
+"""Общие утилиты для работы с камерой через OpenCV (Windows DSHOW / Linux V4L2)."""
 import json
+import sys
 import time
 from pathlib import Path
 
 import cv2
 
 ROOT = Path(__file__).resolve().parent.parent
+
+DEFAULT_BACKEND = cv2.CAP_DSHOW if sys.platform.startswith("win") else cv2.CAP_V4L2
 
 
 def fourcc_to_str(value):
@@ -45,7 +48,7 @@ def set_focus(cap, focus, settle=0.3):
     time.sleep(settle)
 
 
-def open_camera(index, width=None, height=None, fourcc=None, backend=cv2.CAP_DSHOW, verbose=True, saved_focus=True):
+def open_camera(index, width=None, height=None, fourcc=None, backend=None, verbose=True, saved_focus=True):
     """fourcc=None по умолчанию - НЕ трогаем формат, камера отдаёт тот поток,
     что выставлен по умолчанию драйвером (почти всегда сырой YUY2/NV12, этого
     и хотим для точной детекции по пикселям - без JPEG-артефактов). Передайте
@@ -57,6 +60,8 @@ def open_camera(index, width=None, height=None, fourcc=None, backend=cv2.CAP_DSH
     saved_focus=True: драйвер при каждом открытии камеры сбрасывает фокус/автофокус,
     поэтому сохранённый фокус (autofocus.py, detect_markers.py, survey_markers.py)
     выставляется заново при каждом открытии."""
+    if backend is None:
+        backend = DEFAULT_BACKEND
     cap = cv2.VideoCapture(index, backend)
     if not cap.isOpened():
         raise RuntimeError(f"Не удалось открыть камеру {index}")
