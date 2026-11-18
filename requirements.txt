@@ -1,5 +1,18 @@
-opencv-python>=4.8
-numpy>=1.24
-pygrabber>=0.2  # опционально, только для scripts/list_formats.py (Windows/DirectShow)
-pyserial>=3.5   # связь с GRBL (scripts/survey_markers.py)
-Pillow>=10      # подписи в окнах с кириллицей
+comtypes==1.4.17
+contourpy==1.4.0
+cycler==0.12.1
+fonttools==4.68.0
+kiwisolver==1.5.1
+matplotlib==3.11.2
+numpy==2.5.4
+opencv-python==5.0.0.93
+packaging==26.3
+pandas==3.1.1
+pillow==13.0.0
+pygrabber==0.2
+pyparsing==3.3.3
+pyserial==3.5
+python-dateutil==4.0.0
+scipy==1.18.1
+seaborn==0.13.2
+tzdata==2026.6

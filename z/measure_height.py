@@ -9,7 +9,12 @@
 
 Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
 Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
-измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+измерить - на карте она пустая, клик по ней скажет "нет текстуры". Если вокруг однотонного места
+есть измеренные точки одной плоскости (чёрная маска платы между площадками), оно достраивается по
+ней - на карте бледным в штриховку, это не замер (--no-fill - не достраивать). Блики: свет едет
+вместе с камерой, засветка в разных кадрах лежит по-разному - сопоставление идёт по кадрам без
+плавной составляющей (--highpass), а место под бликом в опорном кадре, где не измерилось,
+достраивается так же, как однотонное.
 
 Порядок:
   1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
@@ -48,14 +53,16 @@ from common.camera import grab_fresh, open_camera, read_frame  # noqa: E402
 from common.display import add_zoom_trackbar, draw_texts, get_zoom, show_scaled, text_px  # noqa: E402
 from common.grbl import GrblError  # noqa: E402
 from common.markers import detect  # noqa: E402
-from stereo import (Rectifier, SweepAborted, find_objects, fit_plane, half, load_motion, local_table,  # noqa: E402
-                    motion_normal, plane_sweep, points_from_heights, refine_point, under_camera,
-                    colorize)
+from stereo import (Rectifier, SweepAborted, fill_planar, find_objects, low_texture, fit_plane, half, highpass,  # noqa: E402
+                    load_motion, local_table, motion_normal, plane_points, plane_sweep, points_from_heights,
+                    ref_glare, refine_point, under_camera, colorize)
 from survey_markers import (JOG_KEYS, JOG_STEPS, LAYOUT_SETTINGS, Abort, Survey, WindowUI, add_survey_args,  # noqa: E402
                             angle_deg, find_calibration, fmt_move)
 
 PLANE_FILE = ROOT / "calib" / "table_plane.json"
 SCANS_DIR = ROOT / "scans"
+GLARE_MIN_AREA = 100.0  # мм²: пятна блика меньше - блики на мелких деталях, а не засветка поверхности
+SATURATED = 250.0       # яркость пересвета (кадр - среднее 8 снимков, потолок ~254)
 
 
 # ---------- скан: обработка (общая для живого скана и разбора сохранённого)
@@ -84,9 +91,15 @@ class ScanResult:
         step = args.sweep_step
         heights = np.arange(-args.below, args.max_height + step / 2, step)
         t0 = time.time()
-        others = [h[0] for h in halfs[1:args.map_views + 1]] if args.map_views else [h[0] for h in halfs[1:]]
+        # Сопоставление - по кадрам без плавной составляющей (засветка и блики едут вместе с камерой, см. highpass).
+        # Исходные кадры остаются для показа и для поиска блика.
+        self.hp = float(getattr(args, "highpass", 4.0) or 0)
+        raw = [h[0] for h in halfs]
+        match = [highpass(h, self.hp) for h in raw] if self.hp > 0 else raw
+        self._match_full = None
+        others = match[1:args.map_views + 1] if args.map_views else match[1:]
         self.hmap, self.score, self.valid = plane_sweep(
-            halfs[0][0], others, self.Os[1:len(others) + 1], self.Ks, n0, d0, heights, ref_valid=vh,
+            match[0], others, self.Os[1:len(others) + 1], self.Ks, n0, d0, heights, ref_valid=vh,
             others_valid=[vh] * len(others), win=args.win, min_std=args.min_texture, min_score=args.min_score,
             tick=tick)
         log(f"карта высот: {len(heights)} уровней x {len(others)} кадров за {time.time() - t0:.0f} с, "
@@ -115,6 +128,33 @@ class ScanResult:
         self.ht = (self.d_t - self.X @ self.n_t).astype(np.float32)
         self.ht[~self.valid] = np.nan
         px_mm = self.Ks[0, 0] / self.d_t
+        # Однотонные места (чёрная маска платы, гладкий пластик) перебор высот не меряет. Если вокруг них есть
+        # измеренные точки одной плоскости (площадки, отверстия, маркировка) - достраиваем по ней. Это НЕ замер:
+        # отдельная маска self.filled, объекты ищутся только по измеренному.
+        # Под бликом в опорном кадре поверхности не видно (там ложная текстура засветки, а не однотонность) -
+        # где там не измерилось, тоже достраиваем. Кроме пересвета: под ним может быть что угодно.
+        self.filled = np.zeros_like(self.valid)
+        self.glare = np.zeros_like(self.valid)
+        self.planes = []
+        if getattr(args, "fill_planes", True):
+            low = low_texture(match[0], args.win, args.min_texture, vh, sat=SATURATED, raw=raw[0])
+            X_al = np.where(self.valid[..., None], self.X, plane_points(self.Ks, self.n_t, self.d_t, self.valid.shape))
+            self.glare = ref_glare(raw, vh, self.Os, self.Ks, X_al, min_area=int(GLARE_MIN_AREA * px_mm ** 2))
+            low |= self.glare & (raw[0] < SATURATED) & vh
+            lab, Xf, self.planes = fill_planar(
+                self.X, self.valid, low, self.Ks, self.n_t,
+                min_area=max(500, int(getattr(args, "fill_min_area", 25.0) * px_mm ** 2)),
+                tol=getattr(args, "fill_tol", 0.25), margin_px=int(round(getattr(args, "fill_margin", 3.0) * px_mm)))
+            self.filled = lab > 0
+            if self.glare.any():
+                log(f"блик в опорном кадре: {100 * self.glare.mean():.0f}% кадра (где не измерилось - достраивается)")
+            if self.filled.any():
+                self.X = np.where(self.filled[..., None], Xf, self.X)
+                self.ht[self.filled] = (self.d_t - Xf[self.filled] @ self.n_t).astype(np.float32)
+                for k, pl in enumerate(self.planes, 1):
+                    pl["height_mm"] = float(np.median(self.ht[lab == k]))  # над столом
+                    pl["tilt_to_table_deg"] = pl.pop("tilt_deg")
+                log(f"достроено по плоскости: {100 * self.filled.mean():.0f}% кадра ({len(self.planes)} обл.)")
         self.objects = find_objects(self.ht, self.valid, args.min_height, max(50, int(args.min_area * px_mm ** 2)))
         for o in self.objects:
             pts = o["top_px"]
@@ -129,6 +169,13 @@ class ScanResult:
             return float(self.ht[v, u])
         return None
 
+    def match_full(self):
+        """Кадры полного разрешения для замера по клику - с тем же фильтром, что и карта (σ вдвое больше:
+        пиксели вдвое мельче). Считаются при первом клике."""
+        if self._match_full is None:
+            self._match_full = [highpass(f, 2 * self.hp) for f in self.full] if self.hp > 0 else self.full
+        return self._match_full
+
     def measure(self, x_full):
         a = self.args
         h_map = self.table_height_at(x_full)
@@ -136,7 +183,8 @@ class ScanResult:
             lo, hi = h_map - a.click_range, h_map + a.click_range
         else:
             lo, hi = -a.below, a.max_height
-        res = refine_point(self.full[0], self.full[1:], self.Os[1:], self.K, self.n_t, self.d_t, x_full, lo, hi,
+        mf = self.match_full()
+        res = refine_point(mf[0], mf[1:], self.Os[1:], self.K, self.n_t, self.d_t, x_full, lo, hi,
                            patch=a.patch, min_std=a.min_texture, ref_valid=self.valid_full)
         if "error" in res:
             return res
@@ -153,7 +201,8 @@ class ScanResult:
     def render(self, sel=None):
         a = self.args
         hi = max(a.min_height + 0.5, max([o["height_top"] for o in self.objects], default=1.0) * 1.05)
-        small = colorize(self.ht, self.valid, self.full[0][::2, ::2][:self.ht.shape[0], :self.ht.shape[1]], -0.3, hi)
+        small = colorize(self.ht, self.valid, self.full[0][::2, ::2][:self.ht.shape[0], :self.ht.shape[1]], -0.3, hi,
+                         filled=self.filled)
         img = cv2.resize(small, (self.full[0].shape[1], self.full[0].shape[0]), interpolation=cv2.INTER_NEAREST)
         size = text_px(img)
         texts = []
@@ -172,6 +221,8 @@ class ScanResult:
                 texts.append((txt, (x + size, y - size), size, (255, 255, 255), (120, 0, 120)))
         head = [f"высоты над столом: от -0.3 до {hi:.1f} мм (синий -> красный), серое - не определилось",
                 f"отсчёт: {self.ref_kind}"] + self.notes
+        if self.filled.any():
+            head.append("бледное в штриховку - достроено по плоскости (однотонно или под бликом, не измерено)")
         for i, line in enumerate(head):
             texts.append((line, (8, 6 + i * (size + 8)), size, (255, 255, 255), (0, 0, 0)))
         return draw_texts(img, texts)
@@ -189,7 +240,10 @@ class ScanResult:
     def to_json(self):
         return {"ref_kind": self.ref_kind, "table_plane_ref_cam": {"n": np.asarray(self.n_t).tolist(), "d": float(self.d_t)},
                 "global_offset_mm": self.global_offset, "notes": self.notes,
-                "objects": [{k: v for k, v in o.items() if k not in ("contour", "top_px")} for o in self.objects]}
+                "objects": [{k: v for k, v in o.items() if k not in ("contour", "top_px")} for o in self.objects],
+                "filled_planes": [{k: (np.asarray(v).tolist() if k == "n" else v) for k, v in p.items()}
+                                  for p in self.planes],
+                "highpass_px": self.hp, "glare_share": float(self.glare.mean())}
 
 
 def save_scan(folder, frames, positions, ref_index, meta):
@@ -594,6 +648,16 @@ def add_height_args(ap):
     ap.add_argument("--win", type=int, default=9, help="окно сравнения для карты, px (половинное разрешение)")
     ap.add_argument("--min-texture", type=float, default=2.0, help="минимальная текстура (СКО яркости в окне)")
     ap.add_argument("--min-score", type=float, default=0.5, help="минимальная корреляция кадров для карты")
+    ap.add_argument("--highpass", type=float, default=4.0,
+                    help="сопоставление по кадрам без плавной засветки: из кадра вычитается его размытая копия "
+                         "(σ, px половинного разрешения); 0 - выкл")
+    ap.add_argument("--no-fill", dest="fill_planes", action="store_false",
+                    help="не достраивать однотонные области и места под бликом (чёрная маска платы) по плоскости")
+    ap.add_argument("--fill-tol", type=float, default=0.25, help="достройка: точки плоскости в пределах +-мм")
+    ap.add_argument("--fill-min-area", type=float, default=25.0,
+                    help="достройка: однотонная область меньше стольки мм^2 не достраивается")
+    ap.add_argument("--fill-margin", type=float, default=3.0,
+                    help="достройка: насколько выходить за крайние измеренные точки плоскости, мм")
     ap.add_argument("--table-near", type=float, default=3.0, help="стол ищется в пределах +-мм от ожидаемого")
     ap.add_argument("--min-height", type=float, default=0.5, help="объект - то, что выше стола на, мм")
     ap.add_argument("--min-area", type=float, default=4.0, help="минимальная площадь объекта, мм^2")

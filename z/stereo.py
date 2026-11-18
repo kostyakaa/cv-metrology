@@ -110,6 +110,16 @@ class Rectifier:
         return cv2.remap(img, self.m1, self.m2, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
 
+def highpass(img, sigma):
+    """Кадр без плавной составляющей: из него вычитается размытая копия (Гаусс sigma, px).
+    Свет едет вместе с камерой, поэтому плавная засветка и блики в разных кадрах лежат по-разному. ZNCC
+    убирает сдвиг и масштаб яркости в окне, а наклон (перепад поперёк окна) - нет: на слабой текстуре
+    (чёрная маска платы) он перебивает настоящую текстуру и даёт ложные высоты. Линейный перепад размытие
+    не меняет, поэтому он вычитается целиком, а мелкая текстура (по ней и идёт сопоставление) остаётся."""
+    img = np.asarray(img, np.float32)
+    return img - cv2.GaussianBlur(img, (0, 0), sigma)
+
+
 def half(img, K):
     """Кадр и K вдвое меньше (INTER_AREA: пиксель i покрывает 2i, 2i+1 -> центр 2i+0.5)."""
     small = cv2.resize(img, (img.shape[1] // 2, img.shape[0] // 2), interpolation=cv2.INTER_AREA)
@@ -456,7 +466,152 @@ def find_objects(h_table, valid, min_height=0.5, min_area_px=200, close_px=7, ga
     return sorted(objs, key=lambda o: -o["height_top"])
 
 
-def colorize(h, valid, base, lo, hi):
+def low_texture(img, win=9, min_std=2.0, valid=None, sat=250.0, raw=None):
+    """Пиксели без текстуры (СКО яркости в окне win меньше min_std) - там перебор высот не по чему сравнивать.
+    Пересвеченные (>= sat) не входят: однотонность там от блика, а не от поверхности.
+    img - тот же кадр, по которому шло сопоставление (после highpass); пересвет тогда ищется по raw (исходному)."""
+    img = img.astype(np.float32)
+    m = cv2.boxFilter(img, -1, (win, win), borderType=cv2.BORDER_REFLECT)
+    v = cv2.boxFilter(img * img, -1, (win, win), borderType=cv2.BORDER_REFLECT) - m * m
+    low = v < min_std ** 2
+    raw = img if raw is None else np.asarray(raw, np.float32)
+    bright = cv2.dilate((raw >= sat).astype(np.uint8), np.ones((win, win), np.uint8)) > 0
+    low &= ~bright
+    if valid is not None:
+        low &= valid
+    return low
+
+
+def plane_points(K, n, d, shape):
+    """Точки плоскости n·X = d на лучах всех пикселей кадра (H, W, 3)."""
+    hh, ww = shape
+    u, v = np.meshgrid(np.arange(ww, dtype=np.float64), np.arange(hh, dtype=np.float64))
+    rays = np.stack([u, v, np.ones_like(u)], -1) @ np.linalg.inv(K).T
+    return rays * (d / (rays @ np.asarray(n, float)))[..., None]
+
+
+def ref_glare(views, valid, Os, K, X, thr=0.6, min_area=0, t_abs=12.0, t_rel=0.5, sigma=4.0):
+    """Блик в опорном кадре: место, где опорный кадр заметно светлее той же точки в остальных кадрах.
+    Блик стоит на месте в снимке (свет едет с камерой), а предметы сдвигаются: одна и та же точка в одних
+    кадрах под бликом, в других - нет. "Чистый" вид точки - второй снизу по яркости среди всех кадров (блик
+    только добавляет свет; второй, а не самый тёмный - запас на шум).
+    views - кадры [опорный, остальные...] (исходные, не highpass), valid - где в кадрах есть данные (одна маска
+    на все), Os - центры камер, X - (H, W, 3) точка каждого пикселя опорного (по найденной высоте, где она есть,
+    иначе по плоскости стола). Превышение сглаживается (sigma) и сравнивается с t_abs + t_rel * яркость точки:
+    разница освещённости между кадрами (виньетирование) так блика не даёт. Пятна меньше min_area пикселей
+    отброшены: это блики на мелких деталях, а не засветка поверхности."""
+    hh, ww = views[0].shape
+    m1 = np.full((hh, ww), np.inf, np.float32)
+    m2 = m1.copy()
+    cnt = np.zeros((hh, ww), np.uint8)
+    vm = np.asarray(valid, np.uint8)
+    for img, O in zip(views, Os):
+        P = (X - np.asarray(O, float)) @ np.asarray(K, float).T
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mx = (P[..., 0] / P[..., 2]).astype(np.float32)
+            my = (P[..., 1] / P[..., 2]).astype(np.float32)
+        w = cv2.remap(np.asarray(img, np.float32), mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+                      borderValue=0)
+        ok = cv2.remap(vm, mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0) > 0
+        w = np.where(ok, w, np.inf).astype(np.float32)
+        np.minimum(m2, np.maximum(m1, w), out=m2)  # два наименьших значения по кадрам
+        np.minimum(m1, w, out=m1)
+        cnt += ok
+    clean = np.where(cnt >= 3, m2, np.nan)
+    ref = np.asarray(views[0], np.float32)
+    e = np.where(np.isfinite(clean), ref - clean, 0).astype(np.float32)
+    e = cv2.GaussianBlur(cv2.medianBlur(e, 5), (0, 0), sigma)
+    level = cv2.GaussianBlur(np.nan_to_num(clean, nan=0).astype(np.float32), (0, 0), sigma)
+    glare = (e / (t_abs + t_rel * level) > thr).astype(np.uint8)
+    num, lab, stats, _ = cv2.connectedComponentsWithStats(glare, connectivity=8)
+    keep = np.zeros(num, bool)
+    keep[1:] = stats[1:, cv2.CC_STAT_AREA] >= min_area
+    return keep[lab]
+
+
+def _ransac_plane(P, tol, iters, rng):
+    """Плоскость n·X = d по точкам P (N, 3), устойчиво к выбросам: (n, d, маска inlier) или None."""
+    best = None
+    sub = P if len(P) <= 4000 else P[rng.choice(len(P), 4000, replace=False)]
+    for _ in range(iters):
+        a, b, c = sub[rng.choice(len(sub), 3, replace=False)]
+        n = np.cross(b - a, c - a)
+        nn = np.linalg.norm(n)
+        if nn < 1e-9:
+            continue
+        n /= nn
+        k = int((np.abs(sub @ n - n @ a) < tol).sum())
+        if best is None or k > best[0]:
+            best = (k, n, float(n @ a))
+    if best is None:
+        return None
+    _, n, d = best
+    inl = np.abs(P @ n - d) < tol
+    for _ in range(3):  # уточнение МНК по inlier
+        if inl.sum() < 3:
+            return None
+        n, d = fit_plane(P[inl])
+        inl = np.abs(P @ n - d) < tol
+    return n, d, inl
+
+
+def fill_planar(X, valid, low, K, n_ref, min_area=3000, tol=0.25, min_inliers=300, min_share=0.3,
+                max_tilt=10.0, iters=300, seed=0, margin_px=0):
+    """Достройка однотонных областей по плоскости: однотонная связная область (без текстуры, без высоты)
+    вместе со всем, что внутри неё (площадки, отверстия, компоненты), - кандидат на плоскую поверхность.
+    По измеренным точкам внутри неё RANSAC ищет плоскость (компоненты над ней - выбросы); однотонные
+    пиксели заполняются этой плоскостью, но только внутри выпуклой оболочки точек, легших на неё, плюс
+    margin_px (край платы под бликом: крайние измеренные точки чуть не доходят до края). Плоскость не дальше
+    max_tilt градусов от n_ref (стола), иначе это не "лежащая" поверхность.
+    Возвращает (номер области у достроенных пикселей (0 - нет), X достроенного (NaN вне), список областей)."""
+    hh, ww = valid.shape
+    rng = np.random.default_rng(seed)
+    filled = np.zeros((hh, ww), np.int16)
+    Xf = np.full((hh, ww, 3), np.nan)
+    Kinv = np.linalg.inv(K)
+    cand = (low & ~valid).astype(np.uint8)
+    num, lab, stats, _ = cv2.connectedComponentsWithStats(cand, connectivity=8)
+    regions = []
+    for i in range(1, num):
+        if stats[i, cv2.CC_STAT_AREA] < min_area:
+            continue
+        comp = (lab == i).astype(np.uint8)
+        cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        area = np.zeros((hh, ww), np.uint8)
+        cv2.drawContours(area, cnts, -1, 1, cv2.FILLED)  # область вместе с "дырками" (площадки, компоненты)
+        pts_m = valid & (area > 0)
+        if pts_m.sum() < min_inliers:
+            continue
+        ys, xs = np.nonzero(pts_m)
+        P = X[ys, xs]
+        res = _ransac_plane(P, tol, iters, rng)
+        if res is None:
+            continue
+        n, d, inl = res
+        if n @ n_ref < 0:
+            n, d = -n, -d
+        tilt = float(np.degrees(np.arccos(np.clip(abs(n @ n_ref), -1, 1))))
+        if inl.sum() < min_inliers or inl.mean() < min_share or tilt > max_tilt:
+            continue
+        hull = cv2.convexHull(np.column_stack([xs[inl], ys[inl]]).astype(np.int32))
+        hm = np.zeros((hh, ww), np.uint8)
+        cv2.fillConvexPoly(hm, hull, 1)
+        if margin_px > 0:
+            hm = cv2.dilate(hm, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin_px + 1, 2 * margin_px + 1)))
+        f = (comp > 0) & (hm > 0)
+        if not f.any():
+            continue
+        fy, fx = np.nonzero(f)
+        rays = np.column_stack([fx, fy, np.ones(len(fx))]) @ Kinv.T
+        Xf[fy, fx] = rays * (d / (rays @ n))[:, None]
+        filled[f] = len(regions) + 1
+        rms = float(np.sqrt(np.mean((P[inl] @ n - d) ** 2)))
+        regions.append({"n": n, "d": float(d), "tilt_deg": tilt, "inliers": int(inl.sum()),
+                        "inlier_share": float(inl.mean()), "rms_mm": rms, "filled_px": int(f.sum())})
+    return filled, Xf, regions
+
+
+def colorize(h, valid, base, lo, hi, filled=None):
     """Карта высот поверх серого кадра: TURBO от lo до hi, недостоверное - тёмно-серое."""
     g = base if base.ndim == 2 else cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
     g8 = np.clip(g, 0, 255).astype(np.uint8)
@@ -464,6 +619,12 @@ def colorize(h, valid, base, lo, hi):
     t = np.clip((np.nan_to_num(h, nan=lo) - lo) / max(hi - lo, 1e-6), 0, 1)
     col = cv2.applyColorMap((t * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
     out = (gray * 0.45).astype(np.uint8)
+    if filled is not None:  # достроенное по плоскости - тот же цвет, но бледнее и в косую штриховку
+        soft = cv2.addWeighted(col, 0.35, gray, 0.2, 0)
+        yy, xx = np.indices(valid.shape)
+        stripe = ((xx + yy) // 3) % 4 == 0
+        soft[stripe] = (soft[stripe] * 0.5).astype(np.uint8)
+        out[filled] = soft[filled]
     blend = cv2.addWeighted(col, 0.65, gray, 0.35, 0)
     out[valid] = blend[valid]
     return out
