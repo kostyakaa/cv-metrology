@@ -1,0 +1,150 @@
+{
+  "Перемычка": {
+    "fit": {
+      "train": 744,
+      "holdout": 269,
+      "inliers": 713,
+      "span_fraction": [
+        0.9696969696969697,
+        0.88
+      ],
+      "long_axis_bins": [
+        199,
+        267,
+        247
+      ],
+      "p95_mm": 0.2318859122501518,
+      "normal": [
+        -0.000615251784704188,
+        -0.0008059295725826483,
+        0.9999994859712505
+      ],
+      "distance": 10.056524442534974
+    },
+    "filled": 127,
+    "all_views": {
+      "cells": 2903,
+      "observed": 933,
+      "confirmed": 263,
+      "median_mm": 10.029852867126465,
+      "p95_error_mm": 0.8674287796020508,
+      "within_010": 330,
+      "confirmed_p95_error_mm": 0.7943223118782043
+    },
+    "nearest": {
+      "cells": 2903,
+      "observed": 2776,
+      "confirmed": 1107,
+      "median_mm": 10.054753303527832,
+      "p95_error_mm": 0.5403192043304443,
+      "within_010": 1463,
+      "confirmed_p95_error_mm": 0.2606019973754883
+    }
+  },
+  "Левая ножка на фото": {
+    "fit": {
+      "train": 71,
+      "holdout": 22,
+      "inliers": 71,
+      "span_fraction": [
+        0.7142857142857143,
+        0.9565217391304348
+      ],
+      "long_axis_bins": [
+        5,
+        26,
+        40
+      ],
+      "p95_mm": 0.17479527603112563,
+      "normal": [
+        -0.013024016044713914,
+        -0.0011884295596713652,
+        0.9999144776635893
+      ],
+      "distance": 9.752589243976404
+    },
+    "filled": 0,
+    "all_views": {
+      "cells": 459,
+      "observed": 387,
+      "confirmed": 54,
+      "median_mm": 10.160638809204102,
+      "p95_error_mm": 10.483359336853027,
+      "within_010": 38,
+      "confirmed_p95_error_mm": 10.3181734085083
+    },
+    "nearest": {
+      "cells": 459,
+      "observed": 459,
+      "confirmed": 133,
+      "median_mm": 10.148496627807617,
+      "p95_error_mm": 0.34837445616722107,
+      "within_010": 143,
+      "confirmed_p95_error_mm": 0.2985588014125824
+    }
+  },
+  "Правая ножка на фото": {
+    "fit": {
+      "train": 90,
+      "holdout": 28,
+      "inliers": 89,
+      "span_fraction": [
+        0.75,
+        0.9714285714285714
+      ],
+      "long_axis_bins": [
+        28,
+        17,
+        44
+      ],
+      "p95_mm": 0.1247978501552799,
+      "normal": [
+        -0.026134527916825037,
+        0.005908755044038489,
+        0.9996409720816739
+      ],
+      "distance": 11.050566918065998
+    },
+    "filled": 29,
+    "all_views": {
+      "cells": 605,
+      "observed": 415,
+      "confirmed": 105,
+      "median_mm": 8.851654052734375,
+      "p95_error_mm": 14.722415924072266,
+      "within_010": 33,
+      "confirmed_p95_error_mm": 10.26921272277832
+    },
+    "nearest": {
+      "cells": 605,
+      "observed": 576,
+      "confirmed": 146,
+      "median_mm": 9.989948272705078,
+      "p95_error_mm": 10.24594497680664,
+      "within_010": 133,
+      "confirmed_p95_error_mm": 0.37500643730163574
+    }
+  },
+  "Окно прорези": {
+    "fit": {},
+    "filled": 0,
+    "all_views": {
+      "cells": 1365,
+      "observed": 769,
+      "confirmed": 102,
+      "median_mm": -11.045595169067383,
+      "p95_error_mm": 26.900035858154297,
+      "within_010": 54,
+      "confirmed_p95_error_mm": 12.80257797241211
+    },
+    "nearest": {
+      "cells": 1365,
+      "observed": 772,
+      "confirmed": 70,
+      "median_mm": -11.440084457397461,
+      "p95_error_mm": 26.06808090209961,
+      "within_010": 88,
+      "confirmed_p95_error_mm": 2.302584171295166
+    }
+  }
+}

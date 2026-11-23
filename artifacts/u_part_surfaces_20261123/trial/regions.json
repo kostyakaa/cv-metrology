@@ -1,0 +1,145 @@
+{
+  "Перемычка": {
+    "fit": {
+      "train": 993,
+      "holdout": 367,
+      "inliers": 886,
+      "span_fraction": [
+        0.9848484848484849,
+        0.92
+      ],
+      "long_axis_bins": [
+        332,
+        282,
+        272
+      ],
+      "p95_mm": 0.6272763324308914,
+      "normal": [
+        -0.0006446226159224372,
+        -0.0004365998135900592,
+        0.999999696921097
+      ],
+      "distance": 10.04411232975687,
+      "reason": "holdout p95 exceeds 0.35 mm"
+    },
+    "filled": 0,
+    "all_views": {
+      "cells": 2905,
+      "observed": 935,
+      "confirmed": 262,
+      "median_mm": 10.029705047607422,
+      "p95_error_mm": 0.8666119575500488,
+      "within_010": 329
+    },
+    "nearest": {
+      "cells": 2905,
+      "observed": 2778,
+      "confirmed": 1107,
+      "median_mm": 10.054634094238281,
+      "p95_error_mm": 0.53999924659729,
+      "within_010": 1462
+    }
+  },
+  "Левая ножка на фото": {
+    "fit": {
+      "train": 113,
+      "holdout": 34,
+      "inliers": 97,
+      "span_fraction": [
+        1.0,
+        1.0
+      ],
+      "long_axis_bins": [
+        8,
+        34,
+        55
+      ],
+      "p95_mm": 0.460123906918846,
+      "normal": [
+        0.0004949604207674577,
+        -0.002050535986443971,
+        0.9999977751557
+      ],
+      "distance": 10.166537613896715,
+      "reason": "holdout p95 exceeds 0.35 mm"
+    },
+    "filled": 0,
+    "all_views": {
+      "cells": 468,
+      "observed": 396,
+      "confirmed": 56,
+      "median_mm": 10.133354187011719,
+      "p95_error_mm": 10.444398880004883,
+      "within_010": 38
+    },
+    "nearest": {
+      "cells": 468,
+      "observed": 468,
+      "confirmed": 136,
+      "median_mm": 10.145358085632324,
+      "p95_error_mm": 0.37807726860046387,
+      "within_010": 144
+    }
+  },
+  "Правая ножка на фото": {
+    "fit": {
+      "train": 169,
+      "holdout": 71,
+      "inliers": 137,
+      "span_fraction": [
+        0.75,
+        0.9857142857142858
+      ],
+      "long_axis_bins": [
+        41,
+        32,
+        64
+      ],
+      "p95_mm": 0.4491901949570094,
+      "normal": [
+        -0.04253424392317855,
+        0.004009284690398227,
+        0.9990869650486665
+      ],
+      "distance": 11.586745105073767,
+      "reason": "holdout p95 exceeds 0.35 mm"
+    },
+    "filled": 0,
+    "all_views": {
+      "cells": 599,
+      "observed": 409,
+      "confirmed": 103,
+      "median_mm": 8.860613822937012,
+      "p95_error_mm": 14.777344703674316,
+      "within_010": 33
+    },
+    "nearest": {
+      "cells": 599,
+      "observed": 570,
+      "confirmed": 144,
+      "median_mm": 10.001740455627441,
+      "p95_error_mm": 10.247772216796875,
+      "within_010": 133
+    }
+  },
+  "Окно прорези": {
+    "fit": {},
+    "filled": 0,
+    "all_views": {
+      "cells": 1365,
+      "observed": 769,
+      "confirmed": 102,
+      "median_mm": -11.045595169067383,
+      "p95_error_mm": 26.900035858154297,
+      "within_010": 54
+    },
+    "nearest": {
+      "cells": 1365,
+      "observed": 772,
+      "confirmed": 70,
+      "median_mm": -11.440084457397461,
+      "p95_error_mm": 26.06808090209961,
+      "within_010": 88
+    }
+  }
+}

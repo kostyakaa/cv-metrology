@@ -100,7 +100,10 @@ class ScanResult:
         self._match_full = None
         self.click_masks = None
         indices = list(range(1, len(halfs)))
-        if args.map_views:
+        if args.map_views and getattr(args, "view_selection", "diverse") == "nearest":
+            indices.sort(key=lambda i: np.linalg.norm(self.Os[i]))
+            indices = indices[:args.map_views]
+        elif args.map_views:
             # При ограничении числа кадров берём разные стороны и базы, а не начало змейки.
             selected, anchors = [], [np.zeros(3)]
             while indices and len(selected) < args.map_views:
@@ -905,6 +908,8 @@ def add_height_args(ap):
     ap.add_argument("--max-height", type=float, default=30.0, help="самый высокий ожидаемый объект, мм")
     ap.add_argument("--below", type=float, default=3.0, help="насколько ниже стола искать (пазы, ямки), мм")
     ap.add_argument("--sweep-step", type=float, default=0.25, help="шаг перебора высот для карты, мм")
+    ap.add_argument("--view-selection", choices=("diverse", "nearest"), default="diverse",
+                    help="Стратегия отбора при --map-views")
     ap.add_argument("--map-views", type=int, default=0, help="кадров для карты (0 - все)")
     ap.add_argument("--min-map-views", type=int, default=4, help="минимум дополнительных ракурсов для пикселя карты")
     ap.add_argument("--min-overlap", type=float, default=0.35, help="минимальная доля перекрытия каждого кадра с опорным; шаг уменьшается автоматически")
@@ -946,7 +951,7 @@ def add_height_args(ap):
 
 def height_settings(args):
     """Settings needed to reproduce the same Z data from the same frames."""
-    keys = ('max_height','below','sweep_step','map_views','min_map_views','win','min_texture','min_score',
+    keys = ('max_height','below','sweep_step','map_views','view_selection','min_map_views','win','min_texture','min_score',
             'peak_margin','texture_ratio','highpass','fill_planes','fill_tol','fill_min_area','fill_margin',
             'references','cell_mm','agree_mm','table_near','pose_tag_height','table_roi','min_height','min_area','patch','click_range','max_sigma')
     return {key:getattr(args,key) for key in keys if hasattr(args,key)}

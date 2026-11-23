@@ -1,0 +1,86 @@
+{
+  "Перемычка": {
+    "range": {
+      "cells": 2903,
+      "confirmed": 1107,
+      "coverage": 0.3813296589734757,
+      "conflicts": 1414,
+      "median_mm": 10.030301094055176,
+      "p95_error_mm": 0.2606019973754883,
+      "within_010": 764
+    },
+    "robust": {
+      "cells": 2903,
+      "confirmed": 1994,
+      "coverage": 0.6868756458835688,
+      "conflicts": 528,
+      "median_mm": 10.04641342163086,
+      "p95_error_mm": 0.3129122257232666,
+      "within_010": 1236
+    }
+  },
+  "Левая ножка на фото": {
+    "range": {
+      "cells": 459,
+      "confirmed": 133,
+      "coverage": 0.289760348583878,
+      "conflicts": 316,
+      "median_mm": 10.168268203735352,
+      "p95_error_mm": 0.2985588014125824,
+      "within_010": 35
+    },
+    "robust": {
+      "cells": 459,
+      "confirmed": 295,
+      "coverage": 0.6427015250544662,
+      "conflicts": 154,
+      "median_mm": 10.20752239227295,
+      "p95_error_mm": 0.31679898500442505,
+      "within_010": 77
+    }
+  },
+  "Правая ножка на фото": {
+    "range": {
+      "cells": 605,
+      "confirmed": 146,
+      "coverage": 0.2413223140495868,
+      "conflicts": 317,
+      "median_mm": 10.100616455078125,
+      "p95_error_mm": 0.37500643730163574,
+      "within_010": 58
+    },
+    "robust": {
+      "cells": 605,
+      "confirmed": 200,
+      "coverage": 0.3305785123966942,
+      "conflicts": 263,
+      "median_mm": 10.075905799865723,
+      "p95_error_mm": 9.43747615814209,
+      "within_010": 74
+    }
+  },
+  "Окно прорези": {
+    "range": {
+      "cells": 1365,
+      "confirmed": 70,
+      "coverage": 0.05128205128205128,
+      "conflicts": 274,
+      "median_mm": -12.48739242553711,
+      "p95_error_mm": 2.302584171295166,
+      "within_010": 21,
+      "positive": 1,
+      "positive_confirmed_fraction": 0.014285714285714285
+    },
+    "robust": {
+      "cells": 1365,
+      "confirmed": 100,
+      "coverage": 0.07326007326007326,
+      "conflicts": 244,
+      "median_mm": -12.494182586669922,
+      "p95_error_mm": 1.0297443866729736,
+      "within_010": 27,
+      "positive": 1,
+      "positive_confirmed_fraction": 0.01
+    }
+  }
+}
