@@ -18,9 +18,10 @@
 
 Важно: поддержка свойств (focus/exposure/...) сильно зависит от драйвера
 камеры и backend'а. Если трекбар визуально не влияет на картинку - скорее
-всего эта property для вашей камеры под DSHOW не поддерживается. Диапазон
+всего эта property для вашей камеры под DSHOW/V4L2 не поддерживается. Диапазон
 CAP_PROP_EXPOSURE и смысл CAP_PROP_AUTO_EXPOSURE (0/1 или 0.25/0.75) тоже
-зависят от драйвера - подбирайте по факту.
+зависят от драйвера - подбирайте по факту. На Linux (V4L2) значения передаются как есть, а
+диапазоны трекбаров читаются у камеры через v4l2-ctl (пакет v4l-utils); автоэкспозиция: 3 - авто, 1 - ручная.
 
 Производительность: cap.set() на части драйверов стоит дорого (десятки-сотни
 мс, переинициализация пайплайна). Поэтому каждое свойство отправляется в
@@ -39,6 +40,7 @@ import cv2
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from common.camera import open_camera, read_frame, grab_fresh, sharpness  # noqa: E402
+from common.system import control_ranges, toggle_auto_exposure  # noqa: E402
 
 # имя -> (cv2.CAP_PROP_*, минимум, максимум) диапазон для трекбара
 PROPS = {
@@ -53,6 +55,15 @@ PROPS = {
     "WB_Temp":      (cv2.CAP_PROP_WB_TEMPERATURE, 2000, 10000),
     "AutoWB":       (cv2.CAP_PROP_AUTO_WB, 0, 1),
 }
+
+
+def platform_props(camera):
+    """PROPS для этой камеры. Если систему можно спросить (Linux, V4L2) - только то, что камера умеет, с её диапазонами
+    (значения идут в камеру как есть); иначе таблица выше."""
+    ranges = control_ranges(camera)
+    if ranges is None:
+        return dict(PROPS)
+    return {name: (PROPS[name][0], *rng) for name, rng in ranges.items()}
 
 
 def clamp(v, lo, hi):
@@ -76,28 +87,29 @@ def main():
     args = ap.parse_args()
 
     cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
+    props = platform_props(args.camera)
 
     win = f"camera_params [{args.camera}]"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-    for name, (_prop, lo, hi) in PROPS.items():
+    for name, (_prop, lo, hi) in props.items():
         cv2.createTrackbar(name, win, 0, hi - lo, nothing)
 
     cfg_path = Path(__file__).resolve().parent.parent / "calib" / f"camera_params_{args.camera}.json"
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
 
-    last_pos = {name: None for name in PROPS}
+    last_pos = {name: None for name in props}
 
     def apply_changed():
         """Шлёт в камеру только те свойства, чей трекбар реально изменился
         с прошлого кадра - критично для fps и чтобы Focus не воевал с Autofocus."""
-        for name, (prop, lo, hi) in PROPS.items():
+        for name, (prop, lo, hi) in props.items():
             pos = cv2.getTrackbarPos(name, win)
             if pos != last_pos[name]:
                 cap.set(prop, lo + pos)
                 last_pos[name] = pos
 
     def sync_trackbars_from_camera():
-        for name, (prop, lo, hi) in PROPS.items():
+        for name, (prop, lo, hi) in props.items():
             val = cap.get(prop)
             pos = clamp(int(round(val - lo)), 0, hi - lo)
             cv2.setTrackbarPos(name, win, pos)
@@ -135,7 +147,7 @@ def main():
             sync_trackbars_from_camera()
         elif key == ord('e'):
             cur = cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
-            cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.0 if cur else 1.0)
+            cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, toggle_auto_exposure(cur))
             sync_trackbars_from_camera()
         elif key == ord('a'):
             print("Автоскан фокуса 0..1023 (шаг 32)...")
@@ -155,13 +167,13 @@ def main():
             sync_trackbars_from_camera()
             print(f"Лучший фокус: {best_focus} (sharpness={best_s:.1f}). Зафиксирован, автофокус выключен.")
         elif key == ord('s'):
-            data = {name: cap.get(prop) for name, (prop, _, _) in PROPS.items()}
+            data = {name: cap.get(prop) for name, (prop, _, _) in props.items()}
             cfg_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
             print(f"Сохранено в {cfg_path}")
         elif key == ord('l'):
             if cfg_path.exists():
                 data = json.loads(cfg_path.read_text())
-                for name, (prop, lo, hi) in PROPS.items():
+                for name, (prop, lo, hi) in props.items():
                     if name in data:
                         cap.set(prop, data[name])
                 sync_trackbars_from_camera()

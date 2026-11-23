@@ -56,6 +56,7 @@ from common.display import MarkerHold, add_zoom_trackbar, draw_marker, draw_text
 from common.focus import FocusAborted, autofocus, center_roi, roi_around  # noqa: E402
 from common.geometry import undistort_points  # noqa: E402
 from common.grbl import Grbl, GrblAborted, GrblError  # noqa: E402
+from common.system import default_serial_port  # noqa: E402
 from common.markers import CORNER_LABELS, detect, detect_precise, make_detector  # noqa: E402
 
 JOG_KEYS = {ord('a'): (-1, 0), ord('d'): (1, 0), ord('w'): (0, 1), ord('s'): (0, -1)}
@@ -829,7 +830,8 @@ def add_survey_args(ap):
     ap.add_argument("--calib", type=str, default=None,
                     help="файл калибровки камеры (по умолчанию - свежий достоверный calib/calib_cam<N>_<WxH>_*.json)")
     ap.add_argument("--no-calib", action="store_true", help="не использовать калибровку камеры")
-    ap.add_argument("--port", type=str, default="COM4")
+    ap.add_argument("--port", type=str, default=default_serial_port(),
+                    help="порт GRBL (по умолчанию COM4 на Windows, /dev/ttyUSB0 или ttyACM0 на Linux)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--span-x", type=float, default=None, help="расстояние между центрами меток по X, мм линейкой")
     ap.add_argument("--span-y", type=float, default=None, help="расстояние между центрами меток по Y, мм линейкой")

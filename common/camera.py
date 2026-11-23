@@ -1,9 +1,11 @@
-"""Общие утилиты для работы с камерой через OpenCV (Windows, backend DSHOW)."""
+"""Общие утилиты для работы с камерой через OpenCV (Windows - backend DSHOW, Linux - V4L2)."""
 import json
 import time
 from pathlib import Path
 
 import cv2
+
+from common.system import CAMERA_BACKEND, camera_open_hint, resolve_device
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -45,7 +47,7 @@ def set_focus(cap, focus, settle=0.3):
     time.sleep(settle)
 
 
-def open_camera(index, width=None, height=None, fourcc=None, backend=cv2.CAP_DSHOW, verbose=True, saved_focus=True):
+def open_camera(index, width=None, height=None, fourcc=None, backend=CAMERA_BACKEND, verbose=True, saved_focus=True):
     """fourcc=None по умолчанию - НЕ трогаем формат, камера отдаёт тот поток,
     что выставлен по умолчанию драйвером (почти всегда сырой YUY2/NV12, этого
     и хотим для точной детекции по пикселям - без JPEG-артефактов). Передайте
@@ -57,9 +59,10 @@ def open_camera(index, width=None, height=None, fourcc=None, backend=cv2.CAP_DSH
     saved_focus=True: драйвер при каждом открытии камеры сбрасывает фокус/автофокус,
     поэтому сохранённый фокус (autofocus.py, detect_markers.py, survey_markers.py)
     выставляется заново при каждом открытии."""
-    cap = cv2.VideoCapture(index, backend)
+    dev = resolve_device(index)
+    cap = cv2.VideoCapture(dev, backend)
     if not cap.isOpened():
-        raise RuntimeError(f"Не удалось открыть камеру {index}")
+        raise RuntimeError(f"Не удалось открыть камеру {index}{camera_open_hint()}")
     if fourcc:
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc))
     if width:
@@ -78,8 +81,9 @@ def open_camera(index, width=None, height=None, fourcc=None, backend=cv2.CAP_DSH
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         reported = fourcc_to_str(cap.get(cv2.CAP_PROP_FOURCC))
-        print(f"Камера {index}: {w}x{h} @ {fps:.1f} fps, cv2 сообщает формат={reported} "
-              f"(под DSHOW это поле не всегда точное - точный список: scripts/list_formats.py)")
+        where = f" (устройство {dev})" if dev != index else ""
+        print(f"Камера {index}{where}: {w}x{h} @ {fps:.1f} fps, cv2 сообщает формат={reported} "
+              f"(под DSHOW это поле не всегда точное; точный список форматов: scripts/list_formats.py)")
         if focus is not None:
             print(f"Камера {index}: фокус {focus} из {params_path(index).name} (автофокус выключен)")
 

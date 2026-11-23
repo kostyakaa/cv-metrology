@@ -7,6 +7,8 @@
 """
 import time
 
+from common.system import default_serial_port, serial_open_hint
+
 JOG_CANCEL = b"\x85"
 SOFT_RESET = b"\x18"
 
@@ -25,7 +27,11 @@ class Grbl:
         Открытие порта на Arduino перезагружает GRBL - станок при этом не двигается."""
         if link is None:
             import serial
-            link = serial.Serial(port, baud, timeout=0.1)
+            port = port or default_serial_port()
+            try:
+                link = serial.Serial(port, baud, timeout=0.1)
+            except serial.SerialException as e:
+                raise GrblError(f"Не открывается порт {port}: {e}{serial_open_hint(e, port)}") from e
         self.link = link
         self.log = log
         self.state = None

@@ -64,6 +64,7 @@ sys.path.append(str(ROOT))
 from common.camera import load_saved_focus, open_camera, read_frame, set_focus  # noqa: E402
 from common.display import add_zoom_trackbar, draw_texts, get_zoom, show_scaled, text_px  # noqa: E402
 from common.grbl import Grbl, GrblAborted, GrblError  # noqa: E402
+from common.system import default_serial_port  # noqa: E402
 from common.geometry import machine_motion  # noqa: E402
 from common.markers import CHARUCO_BOARDS, make_charuco_board  # noqa: E402
 
@@ -197,7 +198,7 @@ class Capture:
         """Сетка точек +-range мм от текущего положения: подход с одной стороны, остановка, усреднение кадров."""
         a = self.args
         if not a.grbl:
-            print("Станок не задан - запустите с --grbl COM4")
+            print("Станок не задан - запустите с --grbl <порт> (COM4 / /dev/ttyUSB0)")
             return
         frame = read_frame(self.cap)
         if detect_board(self.detector, self.board, cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), a.min_corners) is None:
@@ -437,7 +438,8 @@ def main():
                     help="какая напечатанная доска ChArUco (см. make_chessboard.py)")
     ap.add_argument("--min-corners", type=int, default=8, help="минимум углов доски в кадре для захвата")
     ap.add_argument("--detect-width", type=int, default=960, help="ширина кадра для детекции в превью (скорость)")
-    ap.add_argument("--grbl", type=str, default=None, help="порт GRBL (например COM4) - авто-съёмка станком (g)")
+    ap.add_argument("--grbl", type=str, nargs="?", const=default_serial_port(), default=None,
+                    help="порт GRBL (COM4, /dev/ttyUSB0; без значения - порт по умолчанию) - авто-съёмка станком (g)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--range", type=float, default=25.0, help="авто-съёмка: +-мм по X и Y от стартовой точки")
     ap.add_argument("--grid", type=int, default=5, help="авто-съёмка: точек по каждой оси (5 -> 25 кадров)")

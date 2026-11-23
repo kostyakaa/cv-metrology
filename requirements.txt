@@ -1,4 +1,4 @@
-comtypes==1.4.17
+comtypes==1.4.17; sys_platform == "win32"
 contourpy==1.4.0
 cycler==0.12.1
 fonttools==4.68.0
@@ -9,7 +9,7 @@ opencv-python==5.0.0.93
 packaging==26.3
 pandas==3.1.1
 pillow==13.0.0
-pygrabber==0.2
+pygrabber==0.2; sys_platform == "win32"
 pyparsing==3.3.3
 pyserial==3.5
 python-dateutil==4.0.0

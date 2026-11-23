@@ -4,6 +4,8 @@ import time
 import cv2
 import numpy as np
 
+from common.system import font_files
+
 ZOOM_MIN, ZOOM_MAX = 25, 300
 
 try:
@@ -11,7 +13,6 @@ try:
 except ImportError:  # без Pillow подписи рисуются cv2.putText (кириллица превратится в '?')
     Image = None
 
-_FONT_FILES = ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/segoeui.ttf", "DejaVuSans.ttf")
 _fonts = {}
 
 
@@ -45,7 +46,7 @@ def text_px(img):
 
 def _font(size):
     if size not in _fonts:
-        for path in _FONT_FILES:
+        for path in font_files():
             try:
                 _fonts[size] = ImageFont.truetype(path, size)
                 break

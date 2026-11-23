@@ -30,8 +30,8 @@ scripts/make_markers.py). Скрипт по очереди включает ка
     python scripts/compare_modes.py --camera 0 --focus 480
     python scripts/compare_modes.py --camera 0 --modes YUY2:640x480 MJPG:1920x1080 MJPG:3264x2448
 
-Без --modes режимы берутся из DirectShow (нужен pygrabber, как для
-list_formats.py). Результат сохраняется в calib/modes_cam<index>.json.
+Без --modes режимы берутся из DirectShow (Windows, нужен pygrabber, как для
+list_formats.py) или из V4L2 (Linux, нужен v4l2-ctl). Результат сохраняется в calib/modes_cam<index>.json.
 """
 import argparse
 import json
@@ -45,6 +45,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
 from common.camera import open_camera, set_focus  # noqa: E402
+from common.system import camera_formats  # noqa: E402
 from common.markers import detect_precise, make_detector  # noqa: E402
 
 
@@ -54,19 +55,12 @@ def parse_mode(text):
     return fourcc.upper(), w, h
 
 
-def modes_from_directshow(device_index):
-    from pygrabber.dshow_graph import FilterGraph
-    g = FilterGraph()
-    g.add_video_input_device(device_index)
-    try:
-        formats = g.get_input_device().get_formats()
-    finally:
-        g.remove_filters()
+def modes_from_system(device_index):
+    """Режимы (FOURCC, ширина, высота) камеры: DirectShow (Windows, pygrabber) или V4L2 (Linux, v4l2-ctl)."""
     modes = []
-    for f in formats:
-        m = (f["media_type_str"].upper(), f["width"], f["height"])
-        if m not in modes:
-            modes.append(m)
+    for fourcc, w, h, _fps in camera_formats(device_index):
+        if (fourcc.upper(), w, h) not in modes:
+            modes.append((fourcc.upper(), w, h))
     return modes
 
 
@@ -113,7 +107,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--modes", type=str, nargs="+", default=None,
-                     help="режимы вида FOURCC:WxH (например YUY2:1280x720); без аргумента - все из DirectShow")
+                     help="режимы вида FOURCC:WxH (например YUY2:1280x720); без аргумента - все из DirectShow/V4L2")
     ap.add_argument("--focus", type=int, default=None, help="зафиксировать фокус на этом значении во всех режимах")
     ap.add_argument("--warmup", type=int, default=8, help="кадров на прогрев после переключения режима")
     ap.add_argument("--frames", type=int, default=5, help="кадров на усреднение углов меток")
@@ -123,9 +117,10 @@ def main():
         modes = [parse_mode(m) for m in args.modes]
     else:
         try:
-            modes = modes_from_directshow(args.camera)
-        except ImportError:
-            print("Нет pygrabber - поставьте его (pip install pygrabber) или передайте --modes вручную.")
+            modes = modes_from_system(args.camera)
+        except (ImportError, RuntimeError) as e:
+            print(f"Список режимов не получить ({e}) - поставьте pygrabber (Windows) / v4l-utils (Linux) "
+                  f"или передайте --modes вручную.")
             return
     print(f"Режимов к проверке: {len(modes)}. Камеру и лист с метками не трогать!")
 
