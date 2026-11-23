@@ -10,6 +10,8 @@ import json
 import os
 import sys
 import types
+import threading
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 
 import cv2
@@ -108,6 +110,16 @@ class Rectifier:
         return cv2.remap(img, self.m1, self.m2, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
 
+def highpass(img, sigma):
+    """Кадр без плавной составляющей: из него вычитается размытая копия (Гаусс sigma, px).
+    Свет едет вместе с камерой, поэтому плавная засветка и блики в разных кадрах лежат по-разному. ZNCC
+    убирает сдвиг и масштаб яркости в окне, а наклон (перепад поперёк окна) - нет: на слабой текстуре
+    (чёрная маска платы) он перебивает настоящую текстуру и даёт ложные высоты. Линейный перепад размытие
+    не меняет, поэтому он вычитается целиком, а мелкая текстура (по ней и идёт сопоставление) остаётся."""
+    img = np.asarray(img, np.float32)
+    return img - cv2.GaussianBlur(img, (0, 0), sigma)
+
+
 def half(img, K):
     """Кадр и K вдвое меньше (INTER_AREA: пиксель i покрывает 2i, 2i+1 -> центр 2i+0.5)."""
     small = cv2.resize(img, (img.shape[1] // 2, img.shape[0] // 2), interpolation=cv2.INTER_AREA)
@@ -126,59 +138,155 @@ def plane_homography(K, O, n, d):
 
 # ---------- плотная карта: перебор плоскостей, параллельных опорной
 def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid=None, win=9, min_std=2.0,
-                min_score=0.5, min_views=2, tick=None):
+                min_score=0.5, min_views=2, tick=None, workers=None, strip=None):
     """Для каждого пикселя опорного кадра - высота h над плоскостью n·X = d0, при которой остальные кадры,
     перенесённые через плоскость n·X = d0 - h, лучше всего совпадают с опорным (средняя ZNCC в окне win).
-    Возвращает (карта высот с NaN где не определилась, лучшая корреляция, маска достоверных)."""
+    Возвращает (карта высот с NaN где не определилась, лучшая корреляция, маска достоверных).
+    workers - потоков (по умолчанию min(ядер, 8)), strip - строк в полосе (по умолчанию кадр / workers).
+    tick(i, n) вызывается из вызывающего потока; True - прервать (SweepAborted)."""
+    if len(others) != len(Os) or (others_valid is not None and len(others_valid) != len(others)):
+        raise ValueError("Ракурсы, позиции и маски должны соответствовать друг другу")
+    heights = np.asarray(heights, float)
+    if (heights.ndim != 1 or len(heights) < 3 or not np.all(np.isfinite(heights))
+            or heights[1] <= heights[0] or not np.allclose(np.diff(heights), heights[1] - heights[0])
+            or not np.isfinite(d0) or heights[-1] >= d0):
+        raise ValueError("Нужны минимум три равномерных уровня высоты перед камерой")
+    if win < 3 or win % 2 == 0 or not np.isfinite(min_std) or min_std <= 0:
+        raise ValueError("Окно должно быть нечётным и >= 3, порог текстуры — положительным")
     hh, ww = ref.shape
-    size = (ww, hh)
-    ref = ref.astype(np.float32)
+    r = win // 2
+    var_floor = np.float32(min_std ** 2)
 
     def box(a):
         return cv2.boxFilter(a, cv2.CV_32F, (win, win), borderType=cv2.BORDER_REFLECT)
 
+    # Яркость - от среднего кадра: ZNCC от сдвига яркости не зависит, а дисперсия как box(x²) - box(x)² во
+    # float32 при яркостях ~200 теряет точность (вычитание близких ~4e4) - на однотонных местах это давало
+    # "корреляцию" > 1, и такой мусор выигрывал перебор высот.
+    ref = ref.astype(np.float32)
+    ref = ref - np.float32(ref.mean())
     mr = box(ref)
     vr = np.maximum(box(ref * ref) - mr * mr, 0)
-    texture = vr > min_std ** 2
+    texture = vr > var_floor
     if ref_valid is not None:
         texture &= cv2.erode(ref_valid.astype(np.uint8), np.ones((win, win), np.uint8)) > 0
-    masks = [(np.ones_like(ref) if m is None else m.astype(np.float32))
-             for m in (others_valid or [None] * len(others))]
-    others = [o.astype(np.float32) for o in others]
+    inv_sd = (1 / np.sqrt(np.maximum(vr, var_floor))).astype(np.float32)
+    # Маска "окно целиком в данных" не зависит от уровня высоты - эрозия один раз на кадр, на уровне только
+    # перенос (uint8, ближайший сосед; для переноса это то же, что box(перенесённая маска) == 1).
+    kernel = np.ones((win, win), np.uint8)
+    imgs, wins = [], []
+    for img, m in zip(others, others_valid or [None] * len(others)):
+        img = img.astype(np.float32)
+        m = np.ones(img.shape, np.uint8) if m is None else m.astype(np.uint8)
+        imgs.append(img - np.float32(img[m > 0].mean() if m.any() else img.mean()))
+        wins.append(cv2.erode(m, kernel, borderType=cv2.BORDER_CONSTANT, borderValue=0))
     Kinv = np.linalg.inv(K)
+    nl = len(heights)
+    # гомографии (выход -> вход) для каждого уровня и кадра
+    Hs = [[K @ (np.eye(3) - np.outer(O, n) / (d0 - h)) @ Kinv for O in Os] for h in heights]
+    lin = cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP
+    near = cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP
+
     best = np.full((hh, ww), -2, np.float32)
     best_i = np.full((hh, ww), -1, np.int32)
-    s_prev = np.full((hh, ww), -2, np.float32)
-    s_before = s_prev.copy()
-    s_after = s_prev.copy()
-    heights = np.asarray(heights, float)
-    for i, h in enumerate(heights):
-        acc = np.zeros((hh, ww), np.float32)
-        cnt = np.zeros((hh, ww), np.float32)
-        for img, O, m in zip(others, Os, masks):
-            H = K @ (np.eye(3) - np.outer(O, n) / (d0 - h)) @ Kinv
-            w = cv2.warpPerspective(img, H, size, flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
-            ok = box(cv2.warpPerspective(m, H, size, flags=cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP)) > 0.999
-            mw = box(w)
-            vw = np.maximum(box(w * w) - mw * mw, 0)
-            ncc = (box(ref * w) - mr * mw) / np.sqrt(vr * vw + 1e-3)
-            acc += np.where(ok, ncc, 0)
-            cnt += ok
-        s = np.where(cnt >= min_views, acc / np.maximum(cnt, 1), -2).astype(np.float32)
-        if i > 0:
-            m = best_i == i - 1
-            s_after[m] = s[m]
-        better = s > best
-        s_before[better] = s_prev[better]
-        best[better] = s[better]
-        best_i[better] = i
-        s_prev = s
-        if tick is not None and tick(i + 1, len(heights)):
-            raise SweepAborted()
+    s_before = best.copy()
+    s_after = best.copy()
+
+    # Кадр режется на горизонтальные полосы, каждая считается целиком (все уровни, все кадры) в своём потоке.
+    # Полоса - с запасом r строк сверху и снизу: окна её строк видят настоящих соседей, результат тот же, что по
+    # целому кадру. Буферы полосы выделяются один раз и небольшие (кэш процессора), OpenCV и numpy на время
+    # счёта отпускают GIL. Внутренний пул потоков OpenCV на это время выключен: на мелких вызовах он только
+    # крутится вхолостую и мешает.
+    # Больше 8 потоков не ускоряет (упирается в память и GIL); полос - по одной на поток.
+    workers = max(1, int(workers or min(os.cpu_count() or 1, 8)))
+    strip = max(int(strip or -(-hh // workers)), 2 * r + 1)
+    bands = [(y0, min(y0 + strip, hh)) for y0 in range(0, hh, strip)]
+    bands = [bd for bd in bands if texture[bd[0]:bd[1]].any()]  # без текстуры карта всё равно пустая
+    progress = [0] * len(bands)
+    stop = threading.Event()
+
+    def run_band(k, y0, y1):
+        a, b = max(0, y0 - r), min(hh, y1 + r)
+        rows = b - a
+        sz = (ww, rows)
+        T = np.array([[1, 0, 0], [0, 1, a], [0, 0, 1]], float)  # строка полосы -> строка кадра
+        Hb = [[H @ T for H in Hl] for Hl in Hs]
+        ref_s, mr_s, isd_s = ref[a:b], mr[a:b], inv_sd[a:b]
+        o, m_rows = y0 - a, y1 - y0
+        bst = np.full((m_rows, ww), -2, np.float32)
+        bi = np.full((m_rows, ww), -1, np.int32)
+        sp, sb, sa = bst.copy(), bst.copy(), bst.copy()
+        f32 = lambda: np.empty((rows, ww), np.float32)  # noqa: E731
+        w, ok, ww2, rw, t1, t2, acc = f32(), np.empty((rows, ww), np.uint8), f32(), f32(), f32(), f32(), f32()
+        count_type = np.uint8 if len(imgs) <= 255 else np.int32
+        cnt = np.empty((rows, ww), count_type)
+        sc = np.empty((m_rows, ww), np.float32)
+        for i in range(nl):
+            if stop.is_set():
+                return
+            acc[:] = 0
+            cnt[:] = 0
+            for img, m_win, H in zip(imgs, wins, Hb[i]):
+                cv2.warpPerspective(img, H, sz, dst=w, flags=lin)
+                cv2.warpPerspective(m_win, H, sz, dst=ok, flags=near)
+                np.multiply(w, w, out=ww2)
+                np.multiply(ref_s, w, out=rw)
+                mw, bww, brw = cv2.split(box(cv2.merge([w, ww2, rw])))  # box(w), box(w²), box(ref·w) - за проход
+                # vw = max(box(w²) - mw², min_std²): однотонное окно против текстурного - ncc ~ 0
+                np.multiply(mw, mw, out=t1)
+                np.subtract(bww, t1, out=t1)
+                np.maximum(t1, var_floor, out=t1)
+                np.sqrt(t1, out=t1)
+                np.multiply(mr_s, mw, out=t2)
+                np.subtract(brw, t2, out=t2)
+                np.multiply(t2, isd_s, out=t2)
+                np.divide(t2, t1, out=t2)
+                np.clip(t2, -1, 1, out=t2)
+                cv2.add(acc, t2, dst=acc, mask=ok)
+                cv2.add(cnt, 1, dst=cnt, mask=ok)
+            a_s, c_s = acc[o:o + m_rows], cnt[o:o + m_rows]
+            np.divide(a_s, np.maximum(c_s, 1), out=sc)
+            sc[c_s < min_views] = -2
+            if i > 0:
+                m = bi == i - 1
+                sa[m] = sc[m]
+            better = sc > bst
+            sb[better] = sp[better]
+            bst[better] = sc[better]
+            bi[better] = i
+            sp, sc = sc, sp  # sc перезаписывается на следующем уровне - меняем буферы местами
+            progress[k] = i + 1
+        best[y0:y1], best_i[y0:y1], s_before[y0:y1], s_after[y0:y1] = bst, bi, sb, sa
+
+    workers = min(workers, len(bands) or 1)
+    cv_threads = cv2.getNumThreads()
+    cv2.setNumThreads(1)
+    try:
+        with ThreadPoolExecutor(workers) as pool:
+            futs = [pool.submit(run_band, k, y0, y1) for k, (y0, y1) in enumerate(bands)]
+            try:
+                shown = 0
+                while True:
+                    done, _ = wait(futs, timeout=0.05)
+                    for f in done:
+                        f.result()  # ошибка в потоке - сразу наружу
+                    level = sum(progress) // len(bands) if bands else nl
+                    if tick is not None:
+                        for j in range(shown + 1, level + 1):
+                            if tick(j, nl):
+                                raise SweepAborted()
+                    shown = max(shown, level)
+                    if len(done) == len(futs):
+                        break
+            finally:
+                stop.set()
+    finally:
+        cv2.setNumThreads(cv_threads)
     step = heights[1] - heights[0]
     den = s_before - 2 * best + s_after
     with np.errstate(divide="ignore", invalid="ignore"):
-        delta = np.where(den < -1e-6, 0.5 * (s_before - s_after) / den, 0.0)
+        has_neighbors = (s_before >= -1) & (s_after >= -1)
+        delta = np.where(has_neighbors & (den < -1e-6), 0.5 * (s_before - s_after) / den, 0.0)
     delta = np.clip(delta, -0.5, 0.5)
     hmap = (heights[0] + (best_i + delta) * step).astype(np.float32)
     valid = texture & (best > min_score) & (best_i > 0) & (best_i < len(heights) - 1)
@@ -368,7 +476,152 @@ def find_objects(h_table, valid, min_height=0.5, min_area_px=200, close_px=7, ga
     return sorted(objs, key=lambda o: -o["height_top"])
 
 
-def colorize(h, valid, base, lo, hi):
+def low_texture(img, win=9, min_std=2.0, valid=None, sat=250.0, raw=None):
+    """Пиксели без текстуры (СКО яркости в окне win меньше min_std) - там перебор высот не по чему сравнивать.
+    Пересвеченные (>= sat) не входят: однотонность там от блика, а не от поверхности.
+    img - тот же кадр, по которому шло сопоставление (после highpass); пересвет тогда ищется по raw (исходному)."""
+    img = img.astype(np.float32)
+    m = cv2.boxFilter(img, -1, (win, win), borderType=cv2.BORDER_REFLECT)
+    v = cv2.boxFilter(img * img, -1, (win, win), borderType=cv2.BORDER_REFLECT) - m * m
+    low = v < min_std ** 2
+    raw = img if raw is None else np.asarray(raw, np.float32)
+    bright = cv2.dilate((raw >= sat).astype(np.uint8), np.ones((win, win), np.uint8)) > 0
+    low &= ~bright
+    if valid is not None:
+        low &= valid
+    return low
+
+
+def plane_points(K, n, d, shape):
+    """Точки плоскости n·X = d на лучах всех пикселей кадра (H, W, 3)."""
+    hh, ww = shape
+    u, v = np.meshgrid(np.arange(ww, dtype=np.float64), np.arange(hh, dtype=np.float64))
+    rays = np.stack([u, v, np.ones_like(u)], -1) @ np.linalg.inv(K).T
+    return rays * (d / (rays @ np.asarray(n, float)))[..., None]
+
+
+def ref_glare(views, valid, Os, K, X, thr=0.6, min_area=0, t_abs=12.0, t_rel=0.5, sigma=4.0):
+    """Блик в опорном кадре: место, где опорный кадр заметно светлее той же точки в остальных кадрах.
+    Блик стоит на месте в снимке (свет едет с камерой), а предметы сдвигаются: одна и та же точка в одних
+    кадрах под бликом, в других - нет. "Чистый" вид точки - второй снизу по яркости среди всех кадров (блик
+    только добавляет свет; второй, а не самый тёмный - запас на шум).
+    views - кадры [опорный, остальные...] (исходные, не highpass), valid - где в кадрах есть данные (одна маска
+    на все), Os - центры камер, X - (H, W, 3) точка каждого пикселя опорного (по найденной высоте, где она есть,
+    иначе по плоскости стола). Превышение сглаживается (sigma) и сравнивается с t_abs + t_rel * яркость точки:
+    разница освещённости между кадрами (виньетирование) так блика не даёт. Пятна меньше min_area пикселей
+    отброшены: это блики на мелких деталях, а не засветка поверхности."""
+    hh, ww = views[0].shape
+    m1 = np.full((hh, ww), np.inf, np.float32)
+    m2 = m1.copy()
+    cnt = np.zeros((hh, ww), np.uint8)
+    vm = np.asarray(valid, np.uint8)
+    for img, O in zip(views, Os):
+        P = (X - np.asarray(O, float)) @ np.asarray(K, float).T
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mx = (P[..., 0] / P[..., 2]).astype(np.float32)
+            my = (P[..., 1] / P[..., 2]).astype(np.float32)
+        w = cv2.remap(np.asarray(img, np.float32), mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+                      borderValue=0)
+        ok = cv2.remap(vm, mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0) > 0
+        w = np.where(ok, w, np.inf).astype(np.float32)
+        np.minimum(m2, np.maximum(m1, w), out=m2)  # два наименьших значения по кадрам
+        np.minimum(m1, w, out=m1)
+        cnt += ok
+    clean = np.where(cnt >= 3, m2, np.nan)
+    ref = np.asarray(views[0], np.float32)
+    e = np.where(np.isfinite(clean), ref - clean, 0).astype(np.float32)
+    e = cv2.GaussianBlur(cv2.medianBlur(e, 5), (0, 0), sigma)
+    level = cv2.GaussianBlur(np.nan_to_num(clean, nan=0).astype(np.float32), (0, 0), sigma)
+    glare = (e / (t_abs + t_rel * level) > thr).astype(np.uint8)
+    num, lab, stats, _ = cv2.connectedComponentsWithStats(glare, connectivity=8)
+    keep = np.zeros(num, bool)
+    keep[1:] = stats[1:, cv2.CC_STAT_AREA] >= min_area
+    return keep[lab]
+
+
+def _ransac_plane(P, tol, iters, rng):
+    """Плоскость n·X = d по точкам P (N, 3), устойчиво к выбросам: (n, d, маска inlier) или None."""
+    best = None
+    sub = P if len(P) <= 4000 else P[rng.choice(len(P), 4000, replace=False)]
+    for _ in range(iters):
+        a, b, c = sub[rng.choice(len(sub), 3, replace=False)]
+        n = np.cross(b - a, c - a)
+        nn = np.linalg.norm(n)
+        if nn < 1e-9:
+            continue
+        n /= nn
+        k = int((np.abs(sub @ n - n @ a) < tol).sum())
+        if best is None or k > best[0]:
+            best = (k, n, float(n @ a))
+    if best is None:
+        return None
+    _, n, d = best
+    inl = np.abs(P @ n - d) < tol
+    for _ in range(3):  # уточнение МНК по inlier
+        if inl.sum() < 3:
+            return None
+        n, d = fit_plane(P[inl])
+        inl = np.abs(P @ n - d) < tol
+    return n, d, inl
+
+
+def fill_planar(X, valid, low, K, n_ref, min_area=3000, tol=0.25, min_inliers=300, min_share=0.3,
+                max_tilt=10.0, iters=300, seed=0, margin_px=0):
+    """Достройка однотонных областей по плоскости: однотонная связная область (без текстуры, без высоты)
+    вместе со всем, что внутри неё (площадки, отверстия, компоненты), - кандидат на плоскую поверхность.
+    По измеренным точкам внутри неё RANSAC ищет плоскость (компоненты над ней - выбросы); однотонные
+    пиксели заполняются этой плоскостью, но только внутри выпуклой оболочки точек, легших на неё, плюс
+    margin_px (край платы под бликом: крайние измеренные точки чуть не доходят до края). Плоскость не дальше
+    max_tilt градусов от n_ref (стола), иначе это не "лежащая" поверхность.
+    Возвращает (номер области у достроенных пикселей (0 - нет), X достроенного (NaN вне), список областей)."""
+    hh, ww = valid.shape
+    rng = np.random.default_rng(seed)
+    filled = np.zeros((hh, ww), np.int16)
+    Xf = np.full((hh, ww, 3), np.nan)
+    Kinv = np.linalg.inv(K)
+    cand = (low & ~valid).astype(np.uint8)
+    num, lab, stats, _ = cv2.connectedComponentsWithStats(cand, connectivity=8)
+    regions = []
+    for i in range(1, num):
+        if stats[i, cv2.CC_STAT_AREA] < min_area:
+            continue
+        comp = (lab == i).astype(np.uint8)
+        cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        area = np.zeros((hh, ww), np.uint8)
+        cv2.drawContours(area, cnts, -1, 1, cv2.FILLED)  # область вместе с "дырками" (площадки, компоненты)
+        pts_m = valid & (area > 0)
+        if pts_m.sum() < min_inliers:
+            continue
+        ys, xs = np.nonzero(pts_m)
+        P = X[ys, xs]
+        res = _ransac_plane(P, tol, iters, rng)
+        if res is None:
+            continue
+        n, d, inl = res
+        if n @ n_ref < 0:
+            n, d = -n, -d
+        tilt = float(np.degrees(np.arccos(np.clip(abs(n @ n_ref), -1, 1))))
+        if inl.sum() < min_inliers or inl.mean() < min_share or tilt > max_tilt:
+            continue
+        hull = cv2.convexHull(np.column_stack([xs[inl], ys[inl]]).astype(np.int32))
+        hm = np.zeros((hh, ww), np.uint8)
+        cv2.fillConvexPoly(hm, hull, 1)
+        if margin_px > 0:
+            hm = cv2.dilate(hm, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin_px + 1, 2 * margin_px + 1)))
+        f = (comp > 0) & (hm > 0)
+        if not f.any():
+            continue
+        fy, fx = np.nonzero(f)
+        rays = np.column_stack([fx, fy, np.ones(len(fx))]) @ Kinv.T
+        Xf[fy, fx] = rays * (d / (rays @ n))[:, None]
+        filled[f] = len(regions) + 1
+        rms = float(np.sqrt(np.mean((P[inl] @ n - d) ** 2)))
+        regions.append({"n": n, "d": float(d), "tilt_deg": tilt, "inliers": int(inl.sum()),
+                        "inlier_share": float(inl.mean()), "rms_mm": rms, "filled_px": int(f.sum())})
+    return filled, Xf, regions
+
+
+def colorize(h, valid, base, lo, hi, filled=None):
     """Карта высот поверх серого кадра: TURBO от lo до hi, недостоверное - тёмно-серое."""
     g = base if base.ndim == 2 else cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
     g8 = np.clip(g, 0, 255).astype(np.uint8)
@@ -376,6 +629,12 @@ def colorize(h, valid, base, lo, hi):
     t = np.clip((np.nan_to_num(h, nan=lo) - lo) / max(hi - lo, 1e-6), 0, 1)
     col = cv2.applyColorMap((t * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
     out = (gray * 0.45).astype(np.uint8)
+    if filled is not None:  # достроенное по плоскости - тот же цвет, но бледнее и в косую штриховку
+        soft = cv2.addWeighted(col, 0.35, gray, 0.2, 0)
+        yy, xx = np.indices(valid.shape)
+        stripe = ((xx + yy) // 3) % 4 == 0
+        soft[stripe] = (soft[stripe] * 0.5).astype(np.uint8)
+        out[filled] = soft[filled]
     blend = cv2.addWeighted(col, 0.65, gray, 0.35, 0)
     out[valid] = blend[valid]
     return out

@@ -9,7 +9,12 @@
 
 Ось Z станка не используется и не двигается. Фокус не трогать: калибровка верна только при нём.
 Нужна текстура: однотонную гладкую поверхность (белый пластик, полированный металл) так не
-измерить - на карте она пустая, клик по ней скажет "нет текстуры".
+измерить - на карте она пустая, клик по ней скажет "нет текстуры". Если вокруг однотонного места
+есть измеренные точки одной плоскости (чёрная маска платы между площадками), оно достраивается по
+ней - на карте бледным в штриховку, это не замер (--no-fill - не достраивать). Блики: свет едет
+вместе с камерой, засветка в разных кадрах лежит по-разному - сопоставление идёт по кадрам без
+плавной составляющей (--highpass), а место под бликом в опорном кадре, где не измерилось,
+достраивается так же, как однотонное.
 
 Порядок:
   1. Камера на метке: c - подключение, k - отладка осей и наведение на метку (привязка к раскладке
@@ -50,14 +55,16 @@ from common.camera import grab_fresh, open_camera, read_frame  # noqa: E402
 from common.display import add_zoom_trackbar, draw_texts, get_zoom, show_scaled, text_px  # noqa: E402
 from common.grbl import GrblError  # noqa: E402
 from common.markers import detect  # noqa: E402
-from stereo import (Rectifier, SweepAborted, find_objects, fit_plane, half, load_motion, local_table,  # noqa: E402
-                    motion_normal, plane_sweep, points_from_heights, refine_point, under_camera,
-                    colorize, plane_homography)
+from stereo import (Rectifier, SweepAborted, fill_planar, find_objects, low_texture, fit_plane, half, highpass,  # noqa: E402
+                    load_motion, local_table, motion_normal, plane_homography, plane_points, plane_sweep,
+                    points_from_heights, ref_glare, refine_point, under_camera, colorize)
 from survey_markers import (JOG_KEYS, JOG_STEPS, LAYOUT_SETTINGS, Abort, Survey, WindowUI, add_survey_args,  # noqa: E402
                             angle_deg, find_calibration, fmt_move)
 
 PLANE_FILE = ROOT / "calib" / "table_plane.json"
 SCANS_DIR = ROOT / "scans"
+GLARE_MIN_AREA = 100.0  # мм²: пятна блика меньше - блики на мелких деталях, а не засветка поверхности
+SATURATED = 250.0       # яркость пересвета (кадр - среднее 8 снимков, потолок ~254)
 
 
 # ---------- скан: обработка (общая для живого скана и разбора сохранённого)
@@ -83,9 +90,12 @@ class ScanResult:
         self.guess = guess                  # (n, d, что это) - откуда перебирать высоты
         self.global_plane = global_plane    # (n, d) плоскости меток в осях опорной камеры или None
         n0, d0, _ = guess
-        step = args.sweep_step
-        heights = np.arange(-args.below, args.max_height + step / 2, step)
+        heights = sweep_levels(args, d0)
         t0 = time.time()
+        # Подавляем плавные блики только для сопоставления. Исходные кадры нужны для отображения.
+        self.hp = float(getattr(args, "highpass", 4.0) or 0)
+        raw = [h[0] for h in halfs]
+        self._match_full = None
         indices = list(range(1, len(halfs)))
         if args.map_views:
             # При ограничении числа кадров берём разные стороны и базы, а не начало змейки.
@@ -98,9 +108,10 @@ class ScanResult:
             indices = selected
         if not 2 <= args.min_map_views <= len(indices):
             raise ValueError("недостаточно ракурсов для --min-map-views; увеличьте --map-views или уменьшите минимум")
-        others = [halfs[i][0] for i in indices]
+        match_ref = highpass(raw[0], self.hp) if self.hp > 0 else raw[0]
+        others = [highpass(raw[i], self.hp) if self.hp > 0 else raw[i] for i in indices]
         self.hmap, self.score, self.valid = plane_sweep(
-            halfs[0][0], others, [self.Os[i] for i in indices], self.Ks, n0, d0, heights, ref_valid=vh,
+            match_ref, others, [self.Os[i] for i in indices], self.Ks, n0, d0, heights, ref_valid=vh,
             others_valid=[vh] * len(others), win=args.win, min_std=args.min_texture, min_score=args.min_score,
             min_views=args.min_map_views, tick=tick)
         log(f"карта высот: {len(heights)} уровней x {len(others)} кадров за {time.time() - t0:.0f} с, "
@@ -129,6 +140,33 @@ class ScanResult:
         self.ht = (self.d_t - self.X @ self.n_t).astype(np.float32)
         self.ht[~self.valid] = np.nan
         px_mm = self.Ks[0, 0] / self.d_t
+        # Однотонные места (чёрная маска платы, гладкий пластик) перебор высот не меряет. Если вокруг них есть
+        # измеренные точки одной плоскости (площадки, отверстия, маркировка) - достраиваем по ней. Это НЕ замер:
+        # отдельная маска self.filled, объекты ищутся только по измеренному.
+        # Под бликом в опорном кадре поверхности не видно (там ложная текстура засветки, а не однотонность) -
+        # где там не измерилось, тоже достраиваем. Кроме пересвета: под ним может быть что угодно.
+        self.filled = np.zeros_like(self.valid)
+        self.glare = np.zeros_like(self.valid)
+        self.planes = []
+        if getattr(args, "fill_planes", True):
+            low = low_texture(match_ref, args.win, args.min_texture, vh, sat=SATURATED, raw=raw[0])
+            X_al = np.where(self.valid[..., None], self.X, plane_points(self.Ks, self.n_t, self.d_t, self.valid.shape))
+            self.glare = ref_glare(raw, vh, self.Os, self.Ks, X_al, min_area=int(GLARE_MIN_AREA * px_mm ** 2))
+            low |= self.glare & (raw[0] < SATURATED) & vh
+            lab, Xf, self.planes = fill_planar(
+                self.X, self.valid, low, self.Ks, self.n_t,
+                min_area=max(500, int(getattr(args, "fill_min_area", 25.0) * px_mm ** 2)),
+                tol=getattr(args, "fill_tol", 0.25), margin_px=int(round(getattr(args, "fill_margin", 3.0) * px_mm)))
+            self.filled = lab > 0
+            if self.glare.any():
+                log(f"блик в опорном кадре: {100 * self.glare.mean():.0f}% кадра (где не измерилось - достраивается)")
+            if self.filled.any():
+                self.X = np.where(self.filled[..., None], Xf, self.X)
+                self.ht[self.filled] = (self.d_t - Xf[self.filled] @ self.n_t).astype(np.float32)
+                for k, pl in enumerate(self.planes, 1):
+                    pl["height_mm"] = float(np.median(self.ht[lab == k]))  # над столом
+                    pl["tilt_to_table_deg"] = pl.pop("tilt_deg")
+                log(f"достроено по плоскости: {100 * self.filled.mean():.0f}% кадра ({len(self.planes)} обл.)")
         self.objects = find_objects(self.ht, self.valid, args.min_height, max(50, int(args.min_area * px_mm ** 2)))
         for o in self.objects:
             pts = o["top_px"]
@@ -143,6 +181,13 @@ class ScanResult:
             return float(self.ht[v, u])
         return None
 
+    def match_full(self):
+        """Кадры полного разрешения для замера по клику - с тем же фильтром, что и карта (σ вдвое больше:
+        пиксели вдвое мельче). Считаются при первом клике."""
+        if self._match_full is None:
+            self._match_full = [highpass(f, 2 * self.hp) for f in self.full] if self.hp > 0 else self.full
+        return self._match_full
+
     def measure(self, x_full):
         a = self.args
         h_map = self.table_height_at(x_full)
@@ -150,7 +195,8 @@ class ScanResult:
             lo, hi = h_map - a.click_range, h_map + a.click_range
         else:
             lo, hi = -a.below, a.max_height
-        res = refine_point(self.full[0], self.full[1:], self.Os[1:], self.K, self.n_t, self.d_t, x_full, lo, hi,
+        mf = self.match_full()
+        res = refine_point(mf[0], mf[1:], self.Os[1:], self.K, self.n_t, self.d_t, x_full, lo, hi,
                            patch=a.patch, min_std=a.min_texture, ref_valid=self.valid_full)
         if "error" in res:
             return res
@@ -167,7 +213,8 @@ class ScanResult:
     def render(self, sel=None):
         a = self.args
         hi = max(a.min_height + 0.5, max([o["height_top"] for o in self.objects], default=1.0) * 1.05)
-        small = colorize(self.ht, self.valid, self.full[0][::2, ::2][:self.ht.shape[0], :self.ht.shape[1]], -0.3, hi)
+        small = colorize(self.ht, self.valid, self.full[0][::2, ::2][:self.ht.shape[0], :self.ht.shape[1]], -0.3, hi,
+                         filled=self.filled)
         img = cv2.resize(small, (self.full[0].shape[1], self.full[0].shape[0]), interpolation=cv2.INTER_NEAREST)
         size = text_px(img)
         texts = []
@@ -186,6 +233,8 @@ class ScanResult:
                 texts.append((txt, (x + size, y - size), size, (255, 255, 255), (120, 0, 120)))
         head = [f"высоты над столом: от -0.3 до {hi:.1f} мм (синий -> красный), серое - не определилось",
                 f"отсчёт: {self.ref_kind}"] + self.notes
+        if self.filled.any():
+            head.append("бледное в штриховку - достроено по плоскости (однотонно или под бликом, не измерено)")
         for i, line in enumerate(head):
             texts.append((line, (8, 6 + i * (size + 8)), size, (255, 255, 255), (0, 0, 0)))
         return draw_texts(img, texts)
@@ -203,22 +252,48 @@ class ScanResult:
     def to_json(self):
         return {"ref_kind": self.ref_kind, "table_plane_ref_cam": {"n": np.asarray(self.n_t).tolist(), "d": float(self.d_t)},
                 "global_offset_mm": self.global_offset, "notes": self.notes,
-                "objects": [{k: v for k, v in o.items() if k not in ("contour", "top_px")} for o in self.objects]}
+                "objects": [{k: v for k, v in o.items() if k not in ("contour", "top_px")} for o in self.objects],
+                "filled_planes": [{k: (np.asarray(v).tolist() if k == "n" else v) for k, v in p.items()}
+                                  for p in self.planes],
+                "highpass_px": self.hp, "glare_share": float(self.glare.mean())}
 
 
 def save_scan(folder, frames, positions, ref_index, meta):
-    folder.mkdir(parents=True, exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=False)
     for i, f in enumerate(frames):  # 16 бит: усреднение кадров не теряется
-        cv2.imwrite(str(folder / f"frame_{i:02d}.png"), np.clip(np.round(f * 256), 0, 65535).astype(np.uint16))
+        path = folder / f"frame_{i:02d}.png"
+        if not cv2.imwrite(str(path), np.clip(np.round(f * 256), 0, 65535).astype(np.uint16)):
+            raise OSError(f"Не удалось записать кадр {path}")
     meta = dict(meta, positions=[np.asarray(p).tolist() for p in positions], ref_index=ref_index)
     (folder / "scan.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def load_scan(folder):
-    meta = json.loads((Path(folder) / "scan.json").read_text(encoding="utf-8"))
-    frames = [cv2.imread(str(Path(folder) / f"frame_{i:02d}.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 256
-              for i in range(len(meta["positions"]))]
+    folder = Path(folder)
+    meta = json.loads((folder / "scan.json").read_text(encoding="utf-8"))
+    positions = np.asarray(meta["positions"], float)
+    if (positions.ndim != 2 or positions.shape[1] != 2 or not np.isfinite(positions).all()
+            or not isinstance(meta["ref_index"], int) or not 0 <= meta["ref_index"] < len(positions)):
+        raise ValueError(f"Неверные позиции или индекс опорного кадра в {folder / 'scan.json'}")
+    frames = []
+    for i in range(len(positions)):
+        path = folder / f"frame_{i:02d}.png"
+        frame = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if frame is None or frame.ndim != 2 or frame.dtype != np.uint16:
+            raise ValueError(f"Ожидался читаемый 16-битный серый кадр {path}")
+        if frames and frame.shape != frames[0].shape:
+            raise ValueError(f"Размер кадра {path} не совпадает с первым кадром")
+        frames.append(frame.astype(np.float32) / 256)
     return frames, meta
+
+
+def sweep_levels(args, distance):
+    step, below, above = args.sweep_step, args.below, args.max_height
+    if (not np.isfinite([step, below, above, distance]).all() or step <= 0
+            or below < 0 or above < 0 or above + step / 2 >= distance
+            or (below + above) / step < 1.5):
+        raise ValueError("Проверьте --sweep-step, --below и --max-height: нужны три уровня перед камерой")
+    return np.arange(-below, above + step / 2, step)
 
 
 class MapWindow:
@@ -444,8 +519,10 @@ class HeightTool(Survey):
             raise Abort("--min-overlap должен быть в (0, 1]")
         if not 2 <= self.args.min_map_views <= g * g - 1:
             raise Abort("--min-map-views: от 2 до числа дополнительных ракурсов")
-        if self.args.map_views and self.args.map_views < self.args.min_map_views:
-            raise Abort("--map-views меньше --min-map-views")
+        if self.args.map_views and not self.args.min_map_views <= self.args.map_views <= g * g - 1:
+            raise Abort("--map-views должен быть 0 или от --min-map-views до grid²−1")
+        if self.args.scan_frames < 1 or not np.isfinite(self.args.scan_settle) or self.args.scan_settle < 0:
+            raise Abort("Нужен хотя бы один кадр на точку и конечная неотрицательная пауза")
         k = np.arange(g) - (g - 1) // 2
         exp = self.expected()
         if len(exp) < 4:
@@ -460,6 +537,10 @@ class HeightTool(Survey):
         n, d, _ = guess
         if not np.isfinite(d) or self.args.max_height >= d - 5:
             raise Abort("--max-height должен быть ниже расстояния до стола минимум на 5 мм")
+        try:
+            sweep_levels(self.args, d)
+        except ValueError as e:
+            raise Abort(str(e)) from e
         # Проверка видимой площади на малой маске, на столе и на максимальной высоте.
         mask = cv2.resize(self.rect.valid.astype(np.uint8), (192, 108), interpolation=cv2.INTER_NEAREST)
         S = np.diag([192 / self.size[0], 108 / self.size[1], 1.0])
@@ -587,14 +668,17 @@ class HeightTool(Survey):
         else:
             self.sel = res
             self.say(f"точка: {res['h']:.3f} ±{res['sigma']:.3f} мм над столом (по {res['views'] + 1} кадрам, корреляция "
-                     f"{res['score']:.2f})" + ("" if res["reliable"] else " - НЕНАДЁЖНО") +
-                     f"; камеру на неё: X{res['machine_xy'][0]:.3f} Y{res['machine_xy'][1]:.3f} (g)")
+                     f"{res['score']:.2f})" +
+                     (f". Камеру на точку (g): X{res['machine_xy'][0]:.3f} Y{res['machine_xy'][1]:.3f}"
+                      if res['reliable'] else ". Ненадёжный замер, переезд недоступен"))
         self.show_map()
 
     def go_selected(self):
         self.require_grbl()
         if not self.sel or "machine_xy" not in self.sel:
             raise Abort("сначала клик по карте высот (точка с измеренной высотой)")
+        if not self.sel.get("reliable"):
+            raise Abort("выберите точку с надёжным замером высоты")
         target = np.array(self.sel["machine_xy"], float)
         delta = target - self.position()
         self.check_target(target)
@@ -650,6 +734,16 @@ def add_height_args(ap):
     ap.add_argument("--win", type=int, default=9, help="окно сравнения для карты, px (половинное разрешение)")
     ap.add_argument("--min-texture", type=float, default=2.0, help="минимальная текстура (СКО яркости в окне)")
     ap.add_argument("--min-score", type=float, default=0.5, help="минимальная корреляция кадров для карты")
+    ap.add_argument("--highpass", type=float, default=4.0,
+                    help="сопоставление по кадрам без плавной засветки: из кадра вычитается его размытая копия "
+                         "(σ, px половинного разрешения); 0 - выкл")
+    ap.add_argument("--no-fill", dest="fill_planes", action="store_false",
+                    help="не достраивать однотонные области и места под бликом (чёрная маска платы) по плоскости")
+    ap.add_argument("--fill-tol", type=float, default=0.25, help="достройка: точки плоскости в пределах +-мм")
+    ap.add_argument("--fill-min-area", type=float, default=25.0,
+                    help="достройка: однотонная область меньше стольки мм^2 не достраивается")
+    ap.add_argument("--fill-margin", type=float, default=3.0,
+                    help="достройка: насколько выходить за крайние измеренные точки плоскости, мм")
     ap.add_argument("--table-near", type=float, default=3.0, help="стол ищется в пределах +-мм от ожидаемого")
     ap.add_argument("--min-height", type=float, default=0.5, help="объект - то, что выше стола на, мм")
     ap.add_argument("--min-area", type=float, default=4.0, help="минимальная площадь объекта, мм^2")

@@ -43,7 +43,8 @@ class PlanningTests(unittest.TestCase):
 
     def test_reject_before_motion(self):
         for key, value in [('grid', 4), ('baseline', float('nan')), ('max_height', 70),
-                           ('min_overlap', 0), ('map_views', 2)]:
+                           ('min_overlap', 0), ('map_views', 2), ('map_views', 25),
+                           ('scan_frames', 0), ('sweep_step', 0)]:
             t = self.tool()
             setattr(t.args, key, value)
             with self.assertRaises(Abort):
@@ -55,6 +56,19 @@ class PlanningTests(unittest.TestCase):
 
 
 class ReconstructionTests(unittest.TestCase):
+    def test_view_count_above_uint8_limit(self):
+        rng = np.random.default_rng(11)
+        texture = rng.uniform(0, 255, (60, 88)).astype(np.float32)
+        ref = texture[:, :80]
+        other = texture[:, 4:84]
+        K = np.array([[64., 0, 40], [0, 64, 30], [0, 0, 1]])
+        # Shift is exactly 4 px at depth 64 (height 6).
+        h, _, valid = plane_sweep(ref, [other] * 260, [np.array([4., 0, 0])] * 260,
+                                  K, np.array([0., 0, 1]), 70, [2., 6., 10.],
+                                  min_views=256, workers=1)
+        self.assertTrue(valid[30, 40])
+        self.assertAlmostEqual(float(h[30, 40]), 6, delta=.7)
+
     def test_known_plane_more_views_and_larger_baseline(self):
         rng = np.random.default_rng(42)
         texture = cv2.GaussianBlur(rng.uniform(0, 255, (600, 800)).astype(np.float32), (3, 3), 0)

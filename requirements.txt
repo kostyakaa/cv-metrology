@@ -1,5 +1,10 @@
 opencv-python>=4.8
 numpy>=1.24
-pygrabber>=0.2  # опционально, только для scripts/list_formats.py (Windows/DirectShow)
-pyserial>=3.5   # связь с GRBL (scripts/survey_markers.py)
-Pillow>=10      # подписи в окнах с кириллицей
+Pillow>=10
+pyserial>=3.5
+pygrabber>=0.2; sys_platform == 'win32'
+
+# 3D plot and model export
+matplotlib>=3.8
+scipy>=1.11
+seaborn>=0.13
