@@ -159,7 +159,9 @@ class Survey:
         self.jog_step = 1.0
         self.messages = []
         self.direction_source = None  # для тестов: список направлений вместо вопроса
-        self.focus = load_saved_focus(args.camera)
+        self.focus = getattr(args, "verified_focus", None)
+        if self.focus is None:
+            self.focus = load_saved_focus(args.camera)
         frame = read_frame(cap)
         self.size = (frame.shape[1], frame.shape[0])
         self.target = np.array([(self.size[0] - 1) / 2, (self.size[1] - 1) / 2])

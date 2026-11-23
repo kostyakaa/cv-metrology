@@ -41,10 +41,11 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'z'), str(ROOT/'scripts')]
-from common.camera import autofocus_enabled, open_camera, read_frame, set_focus
+from common.camera import capture_mode, open_camera, read_frame, verify_focus
 from common.grbl import GrblError
 from common.markers import detect
 from common.mosaic import Mosaic, pixel_to_machine, target_displacement
+from common.registration import navigation_quality
 from common.odometry import reduced, motion_leg
 from rebuild_mosaic import rebuild
 from measure_height import HeightTool, MapWindow, add_height_args
@@ -95,12 +96,13 @@ class PlaneScanner(HeightTool):
             return super().tick(frame)
         frame = read_frame(self.cap) if frame is None else frame
         received = time.monotonic()
-        if super().tick(frame):
+        # The moving preview only needs display and Esc. Marker detection is performed at stops.
+        if self.ui.show(frame) == 27:
             return True
         if received-self.motion_samples[-1][0] >= self.motion_interval:
             self.motion_samples.append((received, reduced(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))))
             # Use the most recent normal jog status; do not add serial queries in the stop loop.
-            p = self.grbl.mpos if self.grbl.mpos is not None else self.grbl.wpos
+            p = self.grbl.reported_position
             if p is not None and hasattr(self.grbl, 'last_status_time'):
                 self.motion_status.append(dict(frame_s=received-self.motion_start,
                     status_s=self.grbl.last_status_time-self.motion_start,
@@ -244,6 +246,8 @@ class PlaneScanner(HeightTool):
         folder.mkdir(parents=True,exist_ok=False)
         mosaic = Mosaic(polygon-home,self.args.ppm)
         meta = dict(version=1, units='command_mm_relative_to_home_marker', home_id=home_id,
+                    head_z_mm=self.args.head_z_mm, profile_id=self.profile_id,
+                    camera_mode=getattr(self.args, "camera_mode", None),
                     home_session=home.tolist(), polygon=(polygon-home).tolist(), ppm=self.args.ppm,
                     camera_matrix=self.K.tolist(), dist_coeffs=self.D.tolist(), focus=self.focus,
                     calibration=self.calib_name, model=self.calib_model, blend='central-source',
@@ -266,6 +270,9 @@ class PlaneScanner(HeightTool):
             delta = targets[0]-self.position()
             if np.linalg.norm(delta)>self.args.probe*2:
                 self.verify_direction(marker['id'],delta)
+            start_observation = start + np.linalg.solve(self.A, self.target - marker['center'])
+            meta['start_marker_id'] = int(marker['id'])
+            meta['start_marker_position'] = (start_observation-home).tolist()
             previous_small = None
             for i,p in enumerate(targets):
                 samples = None
@@ -273,7 +280,7 @@ class PlaneScanner(HeightTool):
                     self.motion_start = time.monotonic()
                     self.motion_home = home
                     self.motion_samples = [(self.motion_start, previous_small)]
-                    self.motion_interval = .12
+                    self.motion_interval = .05
                     self.motion_status = []
                 try:
                     self.move(*(p-self.position()),feed=min(self.args.feed,600))
@@ -299,6 +306,9 @@ class PlaneScanner(HeightTool):
                     self.motion_status.append(dict(status_s=stopped-self.motion_start, position=record['position']))
                     flow = motion_leg(samples, meta['records'][-1], record, self.K, self.D, self.calib_model,
                                       self.motion_status, min(self.args.feed,120 if self.args.trial else 600))
+                    intervals = np.diff([t for t, _ in samples])
+                    flow['preview_dt_median_s'] = float(np.median(intervals))
+                    flow['preview_dt_max_s'] = float(intervals.max())
                     flow['status_samples'] = self.motion_status
                     record['motion_from_previous'] = flow
                 meta['records'].append(record)
@@ -315,6 +325,7 @@ class PlaneScanner(HeightTool):
                 self.say(f'Tile {i+1}/{len(targets)}, coverage {meta["coverage_fraction"]:.1%}')
             self.move(*(start-self.position()),feed=min(self.args.feed,600))
             _,closure = self.center_on(marker['id'])
+            meta['return_to_start_mm'] = (closure-start_observation).tolist()
             meta['end_marker_position'] = (closure-home).tolist()
             meta['closure_command_mm'] = (closure-np.array(exp[marker['id']])).tolist()
             meta['complete'] = True
@@ -339,7 +350,16 @@ class PlaneScanner(HeightTool):
         if self.mosaic_folder is None:
             raise Abort('мозаики нет: p - снять, --open <сеанс> - открыть сохранённую')
         inspection_only = self.args.trial or self.mosaic_meta.get('trial')
-        view(self.mosaic_folder, None if inspection_only else self)
+        quality = navigation_quality(self.mosaic_meta)
+        if self.mosaic_meta.get('head_z_mm') != getattr(self.args, 'head_z_mm', None):
+            quality['reasons'].append('изменилось положение головки Z')
+            quality['usable'] = False
+        if self.mosaic_meta.get('profile_id') and self.mosaic_meta['profile_id'] != self.profile_id:
+            quality['reasons'].append('изменился профиль камеры')
+            quality['usable'] = False
+        if not inspection_only and not quality['usable']:
+            self.say('Мозаика открыта для просмотра. ' + ', '.join(quality['reasons']))
+        view(self.mosaic_folder, None if inspection_only or not quality['usable'] else self)
 
     def refine_mosaic_target(self, image, coverage, uv, ppm):
         """Verify a stopped jog against the mosaic and apply at most two bounded corrections."""
@@ -388,6 +408,11 @@ class PlaneScanner(HeightTool):
             self.move(bc,bc,feed=min(self.args.slow_feed,120))
             previous = error
 
+    def scan_focus_z(self):
+        from focus_height import acquire
+        self.require_grbl()
+        acquire(self)
+
     def scan_heights(self):
         """Use the existing multi-view scan around the camera's current position."""
         self.scan_here()
@@ -429,7 +454,8 @@ def view(folder, tool=None):
     offset=np.zeros(2,dtype=float)
     drag=[]
     selected=[]
-    name='Plane mosaic (click: coordinates, g: move, q: close)'
+    area_corners=[]
+    name='Plane mosaic (click: coordinates, a: ROI corner, g: move, q: close)'
     cv2.namedWindow(name,cv2.WINDOW_AUTOSIZE)
     def click(event,x,y,flags,param):
         nonlocal scale,offset
@@ -444,6 +470,9 @@ def view(folder, tool=None):
         elif event==cv2.EVENT_MOUSEMOVE and drag:offset=drag[1]+mouse-drag[0]
         if event!=cv2.EVENT_LBUTTONDOWN:return
         u,v=np.floor((mouse-offset)/scale).astype(int)
+        select_pixel(u, v)
+
+    def select_pixel(u, v):
         if not(0<=v<valid.shape[0] and 0<=u<valid.shape[1]) or not valid[v,u]:return
         xy=origin+np.array([u,v])/meta['ppm']
         command_xy = xy
@@ -454,11 +483,11 @@ def view(folder, tool=None):
             if scale_field is not None:
                 grid_xy = (xy-scale_grid['origin'])/scale_grid['spacing']
                 maps = grid_xy.astype(np.float32).reshape(1,1,2)
-                scale = float(cv2.remap(scale_field,maps,None,cv2.INTER_LINEAR)[0,0])
-                if abs(scale) <= .04:
+                local_scale = float(cv2.remap(scale_field,maps,None,cv2.INTER_LINEAR)[0,0])
+                if abs(local_scale) <= .04:
                     # Undo the local change in projection scale about the source camera.
                     centre = np.asarray(record['position'])
-                    command_xy = centre+(command_xy-centre)/(1+scale)
+                    command_xy = centre+(command_xy-centre)/(1+local_scale)
         selected[:] = [xy, command_xy, (u,v)]
         print(f'XY on plane: {xy.round(3)} mm | home-relative GRBL XY: {command_xy.round(3)} mm')
     cv2.setMouseCallback(name,click)
@@ -477,6 +506,27 @@ def view(folder, tool=None):
             cv2.imshow(name,shown)
             key=cv2.waitKey(30)&255
             if key in (27,ord('q')) or cv2.getWindowProperty(name,cv2.WND_PROP_VISIBLE)<1:break
+            if key == ord('a') and tool is not None and selected:
+                area_corners.append(selected[0].copy())
+                if len(area_corners) == 1:
+                    print("Первая вершина области. Выберите противоположную и нажмите a.")
+                else:
+                    first, second = area_corners
+                    area_corners.clear()
+                    dims = np.abs(second-first)
+                    if dims.min() < 1:
+                        print("Слишком малая область. Выберите углы заново.")
+                        continue
+                    centre = (first+second)/2
+                    uv = np.rint((centre-origin)*meta['ppm']).astype(int)
+                    if not valid[uv[1], uv[0]]:
+                        print("Центр области не покрыт мозаикой")
+                        continue
+                    # Use the same owner/scale conversion as a normal click, at full mosaic resolution.
+                    select_pixel(*uv)
+                    tool.args.area_mm = dims.tolist()
+                    print(f"Область {dims.round(2)} мм, запас {tool.args.area_margin:g} мм. "
+                          "g — к центру, q — закрыть мозаику, b — скан.")
             if key==ord('g') and tool is not None and selected:
                 if anchor is None:
                     print('мозаика не привязана к станку: камеру на любую метку -> c -> k (-> h), снова v и g')
@@ -487,6 +537,7 @@ def view(folder, tool=None):
                     if tool.confirm(f'Camera to mosaic XY {selected[0].round(3).tolist()} '
                                     f'(machine X{target[0]:.2f} Y{target[1]:.2f})?'):
                         bc=tool.backlash_comp
+                        tool.check_target(target-bc)
                         tool.move(*(target-tool.position()-bc),feed=min(tool.args.feed,600))
                         tool.move(bc,bc,feed=tool.args.slow_feed,check=False)
                         p=tool.position()
@@ -503,8 +554,12 @@ def preflight(args, names, ports):
     """Read-only inventory. Never instantiate VideoCapture, Grbl or a serial port."""
     errors = []
     calib,path = find_calibration(args.camera,(args.width,args.height),args.calib)
-    frame = json.loads((ROOT/'calib/table_frame.json').read_text(encoding='utf-8'))
-    plane = json.loads((ROOT/'calib/table_plane.json').read_text(encoding='utf-8'))
+    try:
+        frame = json.loads(args.frame_file.read_text(encoding='utf-8'))
+        plane = json.loads(args.plane_file.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        print(f'Не удалось прочитать геометрию сеанса: {exc}')
+        return False
     if calib is None or path.name != plane['calib']:
         errors.append('Калибровка кадра и плоскости несовместима')
     else:
@@ -537,19 +592,21 @@ def preflight(args, names, ports):
 
 
 def apply_calibration_focus(cap, focus):
-    set_focus(cap, focus)
-    read_frame(cap)
-    actual = cap.get(cv2.CAP_PROP_FOCUS)
-    autofocus = autofocus_enabled(cap)
-    mode = {True: 'включён', False: 'выключен', None: 'не определён'}[autofocus]
-    print(f'Фокус драйвера {actual:g} (калибровка {focus:g}), автофокус {mode}')
-    if not np.isclose(actual, focus, rtol=0, atol=.5) or autofocus is not False:
-        raise Abort('Драйвер не подтвердил ручной фокус калибровки')
+    try:
+        return verify_focus(cap, focus)
+    except ValueError as exc:
+        raise Abort(str(exc)) from exc
 
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_survey_args(ap); add_height_args(ap)
+    ap.add_argument('--focus-z-span', type=float, help='Диапазон подъёма от текущей позиции, мм')
+    ap.add_argument('--focus-z-step', type=float, default=.25)
+    ap.add_argument('--z-feed', type=float, default=30)
+    ap.add_argument('--z-up-sign', choices=(-1,1), type=int)
+    ap.add_argument('--z-limits', nargs=2, type=float, metavar=('LOW','HIGH'),
+                    help='Проверенные границы Z в координатах статуса GRBL, мм')
     ap.add_argument('--tile-step',type=float,default=20)
     ap.add_argument('--ppm',type=float,default=10)
     ap.add_argument('--trial',action='store_true',help='локальная аппаратная проба: квадрат 6 мм, возврат, только c/k/p/v/q')
@@ -563,8 +620,12 @@ def main():
     if args.trial or args.preflight:
         if not args.confirm or args.open or args.no_calib or not (0 < args.probe <= 2):
             ap.error('Проба требует подтверждений, калибровки и хода k до 2 мм')
-        tp=json.loads((ROOT/'calib'/'table_plane.json').read_text(encoding='utf-8'))
-        args.calib = args.calib or str(ROOT/'calib'/tp['calib'])
+        if not args.calib:
+            try:
+                tp = json.loads(args.plane_file.read_text(encoding='utf-8'))
+                args.calib = str(ROOT/'calib'/tp['calib'])
+            except (OSError, ValueError, KeyError) as exc:
+                ap.error(f"Плоскость для пробы: {exc}. Укажите --plane-file и --calib")
         args.width, args.height = args.width or 1920, args.height or 1080
         if not (np.isfinite(args.feed) and np.isfinite(args.slow_feed) and min(args.feed,args.slow_feed)>0):
             ap.error('Подача должна быть положительной')
@@ -591,23 +652,20 @@ def main():
         args.camera = ids[0]
         print(f'Камера [{args.camera}]: {names[args.camera]}')
     if args.tile_step<=0 or args.ppm<=0:ap.error('step/ppm must be positive')
-    if args.scan_frames<1 or args.scan_settle<0:ap.error('Invalid capture settings')
-    use_profile_focus = args.trial or bool(args.camera_name and args.calib)
-    cap=open_camera(args.camera,args.width,args.height,fourcc=args.fourcc or None,saved_focus=not use_profile_focus)
+    if args.head_z_mm is not None and not np.isfinite(args.head_z_mm):ap.error('Некорректная высота головки')
+    if args.scan_frames<1 or not np.isfinite(args.scan_settle) or args.scan_settle<0:ap.error('Invalid capture settings')
+    cap=open_camera(args.camera,args.width,args.height,fourcc=args.fourcc or None,saved_focus=False)
     tool=None
     try:
         frame=read_frame(cap)
         calib,path=find_calibration(args.camera,frame.shape[1::-1],args.calib)
         if calib is None:raise Abort('Camera calibration required')
-        if use_profile_focus:
-            focus = calib['mode']['focus']
-            apply_calibration_focus(cap,focus)
+        focus = apply_calibration_focus(cap, calib['mode'].get('focus'))
+        args.camera_mode = capture_mode(cap, frame.shape[1::-1], args.fourcc)
+        args.verified_focus = focus
         title = 'Диагностика у метки [trial]' if args.trial else 'Скан плоскости и высот'
         tool=PlaneScanner(cap,args,WindowUI(title),calib,path)
-        if use_profile_focus:
-            tool.focus = focus
-        if tool.focus != calib.get('mode',{}).get('focus'):
-            raise Abort('Focus differs from calibration')
+        tool.focus = focus
         if args.open:
             try:
                 tool.open_mosaic(args.open)
@@ -616,7 +674,7 @@ def main():
         actions={ord('c'):tool.connect,ord('k'):tool.calibrate_axes,ord('m'):tool.center_and_record,
                  ord('r'):tool.run_survey,ord('t'):tool.measure_table_plane,ord('p'):tool.scan_plane,
                  ord('v'):tool.show_mosaic,ord('h'):tool.go_home,ord('z'):tool.set_zero,
-                 ord('b'):tool.scan_heights,ord('g'):tool.go_selected}
+                 ord('j'):tool.scan_focus_z,ord('b'):tool.scan_heights,ord('g'):tool.go_selected}
         if args.trial:
             actions = {k:fn for k,fn in actions.items() if k in map(ord,'ckpv')}
             print('Диагностика у метки: c подключение, k проверка осей, p квадрат 6 мм и возврат, v просмотр, q выход.')

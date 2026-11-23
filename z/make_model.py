@@ -35,7 +35,8 @@ for p in (HERE, HERE.parent, HERE.parent / "scripts"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from measure_height import ScanResult, add_height_args, load_scan  # noqa: E402
+from pose_refinement import stereo_positions
+from measure_height import ScanResult, add_height_args, replay_args, load_scan  # noqa: E402
 from stereo import points_from_heights  # noqa: E402
 
 UNKNOWN = -32000
@@ -402,9 +403,10 @@ def main():
     args = ap.parse_args()
 
     frames, meta = load_scan(args.scan_dir)
+    args = replay_args(ap, meta)
     g, gp = meta["guess"], meta.get("global_plane")
     t0 = time.time()
-    sc = ScanResult(frames, meta["positions"], meta["ref_index"], meta["camera_matrix"], np.array(meta["dist_coeffs"]),
+    sc = ScanResult(frames, stereo_positions(frames, meta, args), meta["ref_index"], meta["camera_matrix"], np.array(meta["dist_coeffs"]),
                     meta["model"], meta["V_cam"], (np.array(g["n"]), g["d"], g["kind"]),
                     None if gp is None else (np.array(gp["n"]), gp["d"]), args, log=lambda m: print("  " + m))
     top = build_model(sc, res=args.res, above=args.above, min_part=args.min_part)

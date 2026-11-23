@@ -82,11 +82,12 @@ class LoadMosaicTests(unittest.TestCase):
         tool.args.feed = 300
         def click(name, callback):
             callback(cv2.EVENT_LBUTTONDOWN,6,5,0,None)
+            callback(cv2.EVENT_LBUTTONDOWN,7,5,0,None)
         with patch.multiple(cv2, namedWindow=Mock(), imshow=Mock(), destroyWindow=Mock(),
                             setMouseCallback=click, waitKey=Mock(side_effect=[ord('g'),27]),
                             getWindowProperty=Mock(return_value=1)):
             view(d,tool)
-        np.testing.assert_allclose(tool.check_target.call_args.args[0],np.array([3.,4.])+np.array([.4,.6])/1.02)
+        np.testing.assert_allclose(tool.check_target.call_args.args[0],np.array([3.,4.])+np.array([.5,.6])/1.02)
 
 
 def bare_tool(**attrs):
@@ -134,15 +135,18 @@ class WorkflowTests(unittest.TestCase):
 
     def test_normal_mode_routes_four_corner_scan_jog_and_heights(self):
         cap, tool = Mock(), Mock()
+        cap.get.return_value = 0.
+        cap.getBackendName.return_value = "DSHOW"
         tool.grbl = None
         tool.focus = 185
         tool.seen_marker = False
         tool.ui.closed = False
-        tool.ui.show.side_effect = map(ord, 'ckrtp1wasdbgvq')
+        tool.ui.show.side_effect = map(ord, 'ckrtp1wasdbgjvq')
         frame = np.zeros((10,10,3), np.uint8)
         with (
             patch.object(sys,'argv',['scan_plane.py','--port','COM4']),
             patch('scan_plane.open_camera',return_value=cap),
+            patch('scan_plane.apply_calibration_focus',return_value=185),
             patch('scan_plane.read_frame',return_value=frame),
             patch('scan_plane.find_calibration',return_value=({'mode':{'focus':185}},Path('calib.json'))),
             patch('scan_plane.PlaneScanner',return_value=tool),
@@ -153,7 +157,7 @@ class WorkflowTests(unittest.TestCase):
         ):
             main()
         for action in ('connect','calibrate_axes','run_survey','measure_table_plane','scan_plane',
-                       'scan_heights','go_selected','show_mosaic'):
+                       'scan_heights','go_selected','scan_focus_z','show_mosaic'):
             getattr(tool,action).assert_called_once_with()
         self.assertEqual([call.args[0] for call in tool.jog_key.call_args_list],list(map(ord,'wasd')))
         self.assertEqual(tool.jog_step,.1)

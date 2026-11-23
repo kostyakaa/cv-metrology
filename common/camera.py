@@ -59,6 +59,25 @@ def autofocus_enabled(cap):
     return None
 
 
+def verify_focus(cap, focus):
+    if focus is None:
+        raise ValueError("Профиль не содержит фиксированного фокуса")
+    set_focus(cap, focus)
+    read_frame(cap)
+    actual = cap.get(cv2.CAP_PROP_FOCUS)
+    if not abs(actual - focus) <= .5 or autofocus_enabled(cap) is not False:
+        raise ValueError(f"Драйвер не подтвердил ручной фокус {focus}, показание {actual}")
+    return actual
+
+
+def capture_mode(cap, size, requested_fourcc):
+    """Record negotiated size and driver readbacks alongside the requested transport."""
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    return dict(size=list(size), backend=cap.getBackendName(), requested_fourcc=requested_fourcc,
+                reported_fourcc=fourcc_to_str(cap.get(cv2.CAP_PROP_FOURCC)),
+                reported_fps=fps if 0 < fps < float('inf') else None)
+
+
 def open_camera(index, width=None, height=None, fourcc=None, backend=None, verbose=True, saved_focus=True):
     """fourcc=None по умолчанию - НЕ трогаем формат, камера отдаёт тот поток,
     что выставлен по умолчанию драйвером (почти всегда сырой YUY2/NV12, этого

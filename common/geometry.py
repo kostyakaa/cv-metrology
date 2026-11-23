@@ -18,6 +18,8 @@ def undistort_points(pts, K, D, model="pinhole", P="K"):
     P = K if isinstance(P, str) else P
     if model == "fisheye":
         out = cv2.fisheye.undistortPoints(pts, K, D, None, None, P, UNDISTORT_CRITERIA)
+    elif hasattr(cv2, "undistortPointsIter"):
+        out = cv2.undistortPointsIter(pts, K, D, None, P, UNDISTORT_CRITERIA)
     else:
         out = cv2.undistortPoints(pts, K, D, None, None, P, UNDISTORT_CRITERIA)
     return out.reshape(-1, 2)

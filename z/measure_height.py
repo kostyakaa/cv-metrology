@@ -38,6 +38,7 @@
     python z/measure_height.py --camera 0 --width 1920 --height 1080 --port COM4
 """
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -51,10 +52,11 @@ ROOT = HERE.parent
 sys.path.append(str(ROOT))
 sys.path.append(str(ROOT / "scripts"))
 sys.path.append(str(HERE))
-from common.camera import grab_fresh, open_camera, read_frame  # noqa: E402
+from common.camera import capture_mode, grab_fresh, open_camera, read_frame, verify_focus  # noqa: E402
 from common.display import add_zoom_trackbar, draw_texts, get_zoom, show_scaled, text_px  # noqa: E402
 from common.grbl import GrblError  # noqa: E402
 from common.markers import detect  # noqa: E402
+from pose_refinement import stereo_positions
 from stereo import (Rectifier, SweepAborted, fill_planar, find_objects, low_texture, fit_plane, half, highpass,  # noqa: E402
                     load_motion, local_table, motion_normal, plane_homography, plane_points, plane_sweep,
                     points_from_heights, ref_glare, refine_point, under_camera, colorize)
@@ -96,6 +98,7 @@ class ScanResult:
         self.hp = float(getattr(args, "highpass", 4.0) or 0)
         raw = [h[0] for h in halfs]
         self._match_full = None
+        self.click_masks = None
         indices = list(range(1, len(halfs)))
         if args.map_views:
             # При ограничении числа кадров берём разные стороны и базы, а не начало змейки.
@@ -110,16 +113,27 @@ class ScanResult:
             raise ValueError("недостаточно ракурсов для --min-map-views; увеличьте --map-views или уменьшите минимум")
         match_ref = highpass(raw[0], self.hp) if self.hp > 0 else raw[0]
         others = [highpass(raw[i], self.hp) if self.hp > 0 else raw[i] for i in indices]
+        photo_valid = [vh & (im < SATURATED) for im in raw]
         self.hmap, self.score, self.valid = plane_sweep(
-            match_ref, others, [self.Os[i] for i in indices], self.Ks, n0, d0, heights, ref_valid=vh,
-            others_valid=[vh] * len(others), win=args.win, min_std=args.min_texture, min_score=args.min_score,
+            match_ref, others, [self.Os[i] for i in indices], self.Ks, n0, d0, heights, ref_valid=photo_valid[0],
+            others_valid=[photo_valid[i] for i in indices], win=args.win, min_std=args.min_texture, min_score=args.min_score,
             min_views=args.min_map_views, tick=tick,
             peak_margin=getattr(args,'peak_margin',.045), texture_ratio=getattr(args,'texture_ratio',.045))
         log(f"карта высот: {len(heights)} уровней x {len(others)} кадров за {time.time() - t0:.0f} с, "
             f"определилось {100 * self.valid.mean():.0f}% кадра")
         self.X = points_from_heights(self.hmap, self.Ks, n0, d0)
         self.notes = []
-        loc = local_table(self.X, self.hmap, self.valid, near=args.table_near)
+        table_mask = self.valid
+        if getattr(args, 'table_roi', None):
+            table_mask = np.zeros_like(self.valid)
+            hh, ww = self.valid.shape
+            for x, y, w, h in args.table_roi:
+                if min(x, y) < 0 or min(w, h) <= 0 or x+w > ww or y+h > hh:
+                    raise ValueError("--table-roi вне карты половинного разрешения")
+                table_mask[y:y+h, x:x+w] = self.valid[y:y+h, x:x+w]
+        loc = local_table(self.X, self.hmap, table_mask, near=args.table_near)
+        if getattr(args, 'table_roi', None) and loc is None:
+            self.notes.append("Недостаточно опоры в заданных ROI стола; используется исходная плоскость")
         self.global_offset = None
         if loc is not None:
             self.n_t, self.d_t, share = loc
@@ -193,10 +207,13 @@ class ScanResult:
         a = self.args
         h_map = self.table_height_at(x_full)
         mf = self.match_full()
+        if self.click_masks is None:
+            self.click_masks = [self.valid_full & (im < SATURATED) for im in self.full]
         limits = -a.below,min(a.max_height,self.d_t-1.)
         def measure_in(lo,hi):
             return refine_point(mf[0],mf[1:],self.Os[1:],self.K,self.n_t,self.d_t,x_full,lo,hi,
-                                patch=a.patch,min_std=a.min_texture,ref_valid=self.valid_full,robust=True,
+                                patch=a.patch,min_std=a.min_texture,ref_valid=self.click_masks[0],robust=True,
+                                others_valid=self.click_masks[1:],
                                 texture_ratio=getattr(a,'texture_ratio',.045))
         def reliable(res):
             return ('error' not in res and res['score'] > .6 and sum(res['inlier_views']) >= 3
@@ -206,7 +223,7 @@ class ScanResult:
             window = limits
         res = measure_in(*window)
         # A weak dense-map seed should not confine a click to the wrong height band.
-        if window != limits and 'error' not in res and not reliable(res):
+        if window != limits and not reliable(res):
             alternative = measure_in(*limits)
             if reliable(alternative):
                 res = alternative
@@ -260,12 +277,23 @@ class ScanResult:
             log(f"объект #{i}: верх {o['height_top']:.3f} мм (медиана {o['height_median']:.3f}, макс {o['height_max']:.3f}), "
                 f"центр верха под камерой при X{o['machine_xy'][0]:.3f} Y{o['machine_xy'][1]:.3f}")
 
+    def save_analysis(self, folder):
+        (folder / "result.json").write_text(json.dumps(self.to_json(), indent=2, ensure_ascii=False),
+                                            encoding="utf-8")
+        np.savez_compressed(folder / "heights.npz", height_mm=self.ht, measured=self.valid,
+                            filled=self.filled, glare=self.glare, score=self.score,
+                            K=self.Ks, table_normal=self.n_t, table_distance=self.d_t)
+        if not cv2.imwrite(str(folder / "heights.png"), self.render()):
+            raise OSError("Не удалось сохранить heights.png")
+
     def to_json(self):
         return {"ref_kind": self.ref_kind, "table_plane_ref_cam": {"n": np.asarray(self.n_t).tolist(), "d": float(self.d_t)},
                 "global_offset_mm": self.global_offset, "notes": self.notes,
                 "objects": [{k: v for k, v in o.items() if k not in ("contour", "top_px")} for o in self.objects],
                 "filled_planes": [{k: (np.asarray(v).tolist() if k == "n" else v) for k, v in p.items()}
                                   for p in self.planes],
+                "measured_fraction": float(self.valid.mean()), "filled_fraction": float(self.filled.mean()),
+                "unknown_fraction": float((~(self.valid | self.filled)).mean()),
                 "highpass_px": self.hp, "glare_share": float(self.glare.mean())}
 
 
@@ -335,7 +363,8 @@ class MapWindow:
 class HeightTool(Survey):
     def __init__(self, cap, args, ui, calib, calib_path, grbl_factory=None, frame_path=None, plane_path=None,
                  scans_dir=None, map_window=None):
-        super().__init__(cap, args, ui, grbl_factory=grbl_factory, frame_path=frame_path, calib=calib)
+        super().__init__(cap, args, ui, grbl_factory=grbl_factory, frame_path=frame_path or args.frame_file, calib=calib)
+        self.profile_id = hashlib.sha256(json.dumps(calib, sort_keys=True).encode()).hexdigest()
         if self.K is None:
             raise SystemExit("для высоты нужна калибровка камеры (calibrate_distortion.py со станком)")
         motion = load_motion(calib, calib_path, log=self.say)
@@ -347,7 +376,7 @@ class HeightTool(Survey):
         self.V = self.V_calib.copy()
         self.n_m = motion_normal(self.V)
         self.rect = Rectifier(self.K, self.D, self.size, self.calib_model)
-        self.plane_path = Path(plane_path) if plane_path else PLANE_FILE
+        self.plane_path = Path(plane_path) if plane_path else args.plane_file
         self.scans_dir = Path(scans_dir) if scans_dir else SCANS_DIR
         self.map = map_window
         self.table_plane = None
@@ -402,6 +431,10 @@ class HeightTool(Survey):
         tp = self.table_plane
         if tp is None:
             return None, "плоскость меток не измерена (t)"
+        if tp.get("head_z_mm") != self.args.head_z_mm:
+            return None, "высота головки изменилась — повторите t"
+        if tp.get("profile_id") and tp["profile_id"] != self.profile_id:
+            return None, "содержимое профиля изменилось — повторите t"
         if tp.get("calib") != self.calib_name:
             return None, f"плоскость меток измерена с другой калибровкой ({tp.get('calib')}) - повторите t"
         lay = {int(k): np.array(v, float) for k, v in tp["markers_rel_home_machine_mm"].items()}
@@ -455,6 +488,10 @@ class HeightTool(Survey):
                            patch=patch, ref_valid=self.rect.valid)
         if "error" in res:
             raise Abort(f"ID{marker_id}: высота метки не измерилась ({res['error']})")
+        if (res['at_range_edge'] or not np.isfinite(res['sigma']) or res['sigma'] > .15
+                or res['score'] < .60 or res['peak_margin'] < .045 or sum(res['inlier_views']) < 3):
+            raise Abort(f"ID{marker_id}: слабый замер метки, повторите t (score={res['score']:.2f}, "
+                        f"sigma={res['sigma']:.3f}, margin={res['peak_margin']:.3f})")
         X = res["X"]
         dist = float(self.n_m @ X)
         side_mm = side_px * X[2] / self.K[0, 0]
@@ -501,6 +538,7 @@ class HeightTool(Survey):
             "V_cam": self.V.tolist(),
             "points_rel_home_cam_mm": {str(k): P[k].tolist() for k in ids},
             "plane": {"n": n.tolist(), "d": float(d)},
+            "head_z_mm": self.args.head_z_mm, "profile_id": self.profile_id,
             "camera_to_table_at_home_mm": float(d),
             "tilt_to_motion_deg": angle_deg(n, self.n_m),
             "rise_per_100mm_machine": {"X": float(-slope[0]), "Y": float(-slope[1])},
@@ -524,8 +562,74 @@ class HeightTool(Survey):
         return data
 
     # ---------- скан
+    def cover_area(self, positions, center, lo, hi, step, n, distance):
+        """Add reachable stops where a sampled ROI has too few complete stereo windows."""
+        dims = np.asarray(self.args.area_mm, float)
+        margin = self.args.area_margin
+        if not np.isfinite([*dims, margin]).all() or min(dims) <= 0 or margin < 0:
+            raise Abort("Размеры области должны быть положительными, запас — неотрицательным")
+        half_size = dims / 2 + margin
+        # No point planning a huge/inaccessible array before checking the travel envelope.
+        if np.any(half_size > hi-lo + distance * max(self.size)/min(self.K[0,0], self.K[1,1])):
+            raise Abort("Область выходит за доступное поле")
+        axes = [np.linspace(-a, a, max(2, int(np.ceil(2*a/2))+1)) for a in half_size]
+        xy = np.stack(np.meshgrid(*axes), axis=-1).reshape(-1, 2)
+        ray_base = xy @ self.V.T
+        worlds = []
+        for height in (-self.args.below, self.args.max_height):
+            P = ray_base.copy()
+            P[:, 2] += (distance-height-ray_base @ n)/n[2]
+            worlds.append(P)
+        worlds = np.concatenate(worlds)
+        # Read the usable region of a full-size patch, including its full border.
+        k = 2*self.args.win + 1
+        mask = cv2.erode(self.rect.valid.astype(np.uint8), np.ones((k,k), np.uint8),
+                         borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        def visible(p):
+            proj = (worlds - self.V @ (p-center)) @ self.K.T
+            uv = np.rint(proj[:, :2]/proj[:, 2:]).astype(int)
+            x, y = uv.T
+            ok = (proj[:, 2] > 0) & (x>=0) & (x<mask.shape[1]) & (y>=0) & (y<mask.shape[0])
+            ok[ok] = mask[y[ok], x[ok]] != 0
+            return ok
+        votes = np.sum([visible(p) for p in positions], axis=0)
+        need = self.args.min_map_views + 1
+        if votes.min() >= need:
+            return positions
+        limits = np.ceil(half_size/step).astype(int) + 1
+        candidates = []
+        masks = []
+        for y in range(-limits[1], limits[1]+1):
+            for x in range(-limits[0], limits[0]+1):
+                p = center + np.array([x, y])*step
+                if np.any(p-self.backlash_comp < lo) or np.any(p > hi):
+                    continue
+                if any(np.linalg.norm(p-q) < .01 for q in positions):
+                    continue
+                candidates.append(p)
+                masks.append(visible(p))
+        while votes.min() < need and len(positions) < 49 and masks:
+            gains = [np.count_nonzero(m & (votes < need)) for m in masks]
+            idx = int(np.argmax(gains))
+            if not gains[idx]:
+                break
+            positions.append(candidates.pop(idx))
+            votes += masks.pop(idx)
+        if votes.min() < need:
+            raise Abort("Для области не хватает ракурсов в пределах хода и 49 остановок. Разделите участок")
+        return positions
+
     def plan_scan(self, c0):
         g, b = self.args.grid, self.args.baseline
+        if self.args.pose_tag_height is not None and not np.isfinite(self.args.pose_tag_height):
+            raise Abort("Некорректная высота опорных меток")
+        for x,y,w,h in self.args.table_roi or []:
+            if min(x,y) < 0 or min(w,h) <= 0 or x+w > self.size[0]//2 or y+h > self.size[1]//2:
+                raise Abort("--table-roi вне карты половинного разрешения")
+        if self.args.area_mm and (not np.isfinite([self.args.agree_mm, self.args.cell_mm]).all()
+                                  or min(self.args.agree_mm, self.args.cell_mm) <= 0
+                                  or not 2 <= self.args.references <= g*g or g*g > 49):
+            raise Abort("Проверьте число опорных кадров, шаг ячейки и порог согласия")
         if g < 3 or g % 2 == 0 or not np.isfinite(b) or b <= 0:
             raise Abort("--grid: нечётное число >= 3; --baseline: положительный конечный шаг")
         if not 0 < self.args.min_overlap <= 1:
@@ -578,11 +682,22 @@ class HeightTool(Survey):
                                                     flags=cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP)
                         overlap = min(overlap, float(np.sum((mask > 0) & (warped > 0)) / max(mask.sum(), 1)))
                 if overlap >= self.args.min_overlap:
+                    if self.args.area_mm:
+                        positions = self.cover_area(positions, c0, lo, hi, b, n, d)
                     for p in positions + [c0]:
                         self.check_target(p)
                         self.check_target(p - bc)  # запас на любой подход с выборкой люфта
                     self.scan_plan = {"actual_step_mm": b, "min_pair_overlap": overlap,
                                       "span_mm": np.ptp(positions, axis=0).tolist()}
+                    if self.args.area_mm:
+                        self.scan_plan.update(area_mm=self.args.area_mm, area_margin=self.args.area_margin,
+                                              initial_grid_overlap=overlap)
+                        # The initial pair-overlap guarantee applies to the seed grid only.
+                        self.scan_plan['min_pair_overlap'] = min(
+                            float(np.count_nonzero(mask & cv2.warpPerspective(
+                                mask, plane_homography(Ksmall, self.V @ (p-c0), n, d-height), (192,108),
+                                flags=cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP)) / mask.sum())
+                            for p in positions for height in (-self.args.below, self.args.max_height))
                     return positions
             b *= 0.9
             if b < 2:
@@ -591,16 +706,20 @@ class HeightTool(Survey):
 
     def capture(self):
         """Усреднённый кадр (серый, float) после остановки: буфер вычитывается, станок успокаивается."""
-        t_end = time.time() + self.args.scan_settle
-        while time.time() < t_end:
+        t_end = time.monotonic() + self.args.scan_settle
+        while time.monotonic() < t_end:
             self.cap.grab()
         acc, frame = None, None
-        for _ in range(self.args.scan_frames):
-            frame = grab_fresh(self.cap, flush=self.args.flush)
+        times = []
+        for i in range(self.args.scan_frames):
+            frame = grab_fresh(self.cap, flush=self.args.flush) if i == 0 else read_frame(self.cap)
+            times.append(time.monotonic())
             g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
             acc = g if acc is None else acc + g
         if self.tick(frame):
             raise Abort("скан отменён (ESC)")
+        self.last_capture = dict(received_s=times, median_interval_s=(
+            float(np.median(np.diff(times))) if len(times) > 1 else None))
         return acc / self.args.scan_frames
 
     def scan_here(self):
@@ -619,13 +738,25 @@ class HeightTool(Survey):
         bc = self.backlash_comp
         self.move(-bc, -bc, feed=self.args.slow_feed, check=False)  # к исходной - с минуса, как ко всем точкам
         self.move(bc, bc, feed=self.args.slow_feed, check=False)
-        frames, shot_pos = [], []
+        frames, shot_pos, capture_log = [], [], []
         for p in positions:
             step = p - self.position()
             if np.max(np.abs(step)) > 1e-6:
                 self.move_approach(step)
             frames.append(self.capture())
             shot_pos.append(self.position())
+            status = self.grbl.reported_position
+            capture_log.append(dict(target=p.tolist(), status_frame=self.grbl.reported_frame,
+                                    status_xyz=status, **self.last_capture))
+            if not status or len(status) < 3 or not np.isfinite(status[:3]).all():
+                raise Abort("При XY-сканировании отсутствует фактическая координата XYZ")
+            if len(capture_log) > 1:
+                first_status = capture_log[0]
+                if (first_status['status_frame'] != self.grbl.reported_frame
+                        or abs(first_status['status_xyz'][2] - status[2]) > .025):
+                    raise Abort("При XY-сканировании изменились Z или система координат")
+            if np.linalg.norm(shot_pos[-1]-p) > .05:
+                raise Abort("Положение GRBL после остановки отличается от цели более чем на 0,05 мм")
         self.move_approach(c0 - self.position())
         ref_index = int(np.argmin([np.linalg.norm(p - c0) for p in shot_pos]))
         guess, global_plane = self.plane_guess(shot_pos[ref_index])
@@ -634,22 +765,39 @@ class HeightTool(Survey):
                 "V_cam": self.V.tolist(), "guess": {"n": guess[0].tolist(), "d": guess[1], "kind": guess[2]},
                 "global_plane": None if global_plane is None else {"n": global_plane[0].tolist(), "d": global_plane[1]},
                 "grid": self.args.grid, "baseline": self.scan_plan['actual_step_mm'],
+                "profile_id": self.profile_id, "head_z_mm": self.args.head_z_mm,
+                "camera_mode": getattr(self.args, "camera_mode", None),
+                "captures": capture_log, "scan_settle": self.args.scan_settle,
+                "focus": self.focus, "opencv": cv2.__version__, "numpy": np.__version__,
                 "requested_baseline": self.args.baseline, "scan_plan": self.scan_plan,
                 "height_settings": height_settings(self.args)}
         folder = self.scans_dir / time.strftime("scan_%Y%m%d-%H%M%S")
+        meta.update(positions=np.asarray(shot_pos).tolist(), ref_index=ref_index)
+        # Preserve raw captures before any experimental image processing.
         save_scan(folder, frames, shot_pos, ref_index, meta)
+        stereo_xy = stereo_positions(frames, meta, self.args)
+        if "pose_fit" in meta:
+            tmp = folder / "scan.tmp.json"
+            tmp.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(folder / "scan.json")
         self.say(f"кадры скана сохранены: {folder}")
         self.say("считаю карту высот... (ESC - отмена)")
         try:
-            self.scan = ScanResult(frames, shot_pos, ref_index, self.K, self.D, self.calib_model, self.V, guess,
+            self.scan = ScanResult(frames, stereo_xy, ref_index, self.K, self.D, self.calib_model, self.V, guess,
                                    global_plane, self.args, rect=self.rect, tick=self.sweep_tick, log=self.say)
         except SweepAborted:
             raise Abort("расчёт карты отменён")
         self.sel = None
+        self.scan_folder = folder
         self.scan.report(self.say)
-        (folder / "result.json").write_text(json.dumps(self.scan.to_json(), indent=2, ensure_ascii=False),
-                                            encoding="utf-8")
-        cv2.imwrite(str(folder / "heights.png"), self.scan.render())
+        self.scan.save_analysis(folder)
+        if self.args.area_mm:
+            from area_height import reconstruct
+            try:
+                reconstruct(frames, dict(meta, positions=np.asarray(shot_pos).tolist(), ref_index=ref_index),
+                            self.args, folder / "area", first_scan=self.scan, tick=self.sweep_tick)
+            except SweepAborted:
+                raise Abort("Расчёт области отменён. Исходники сохранены")
         self.show_map()
         return self.scan
 
@@ -676,6 +824,14 @@ class HeightTool(Survey):
         if self.scan is None:
             return
         res = self.scan.measure(x)
+        record = dict(xy_px=list(map(float, x)))
+        for key in ('h', 'h_map', 'sigma', 'spread', 'score', 'reliable', 'views',
+                    'peak_margin', 'at_range_edge', 'machine_xy', 'inlier_views', 'error'):
+            if key in res:
+                val = res[key]
+                record[key] = None if isinstance(val, float) and not np.isfinite(val) else val
+        with (self.scan_folder / 'clicks.jsonl').open('a', encoding='utf-8') as log:
+            log.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
         if "error" in res:
             self.sel = {"x": list(x)}
             self.say(f"точка: {res['error']}")
@@ -730,6 +886,15 @@ class HeightTool(Survey):
 
 
 def add_height_args(ap):
+    ap.add_argument("--head-z-mm", type=float, help="Измеренное положение головки, мм в выбранной системе")
+    ap.add_argument("--frame-file", type=Path, default=ROOT / "calib/table_frame.json")
+    ap.add_argument("--plane-file", type=Path, default=PLANE_FILE)
+    ap.add_argument("--area-mm", type=float, nargs=2, metavar=("WIDTH", "HEIGHT"),
+                    help="Прямоугольник в командных XY вокруг текущей позиции; захват с запасом и многоопорная карта")
+    ap.add_argument("--area-margin", type=float, default=5.)
+    ap.add_argument("--cell-mm", type=float, default=.5)
+    ap.add_argument("--references", type=int, default=5)
+    ap.add_argument("--agree-mm", type=float, default=.35, help="Порог согласия опорных карт, мм")
     ap.add_argument("--grid", type=int, default=5, help="скан: нечётное число кадров по оси (5 -> 25 кадров)")
     ap.add_argument("--baseline", type=float, default=16.0,
                     help="скан: шаг между кадрами, мм (больше - точнее высота, но меньше общая зона кадров)")
@@ -762,6 +927,11 @@ def add_height_args(ap):
                     help="достройка: однотонная область меньше стольки мм^2 не достраивается")
     ap.add_argument("--fill-margin", type=float, default=3.0,
                     help="достройка: насколько выходить за крайние измеренные точки плоскости, мм")
+    ap.add_argument("--no-pose-refinement", dest="pose_tag_height", action="store_const", const=None,
+                    help="Использовать исходные позиции GRBL при пересчёте")
+    ap.add_argument("--pose-tag-height", type=float, help="Высота вспомогательных меток ID4–49 над плоскостью guess, мм")
+    ap.add_argument("--table-roi", nargs=4, type=int, action="append", metavar=("X","Y","W","H"),
+                    help="Открытая поверхность стола, координаты исправленной карты половинного разрешения; повторяемая опция")
     ap.add_argument("--table-near", type=float, default=3.0, help="стол ищется в пределах +-мм от ожидаемого")
     ap.add_argument("--min-height", type=float, default=0.5, help="объект - то, что выше стола на, мм")
     ap.add_argument("--min-area", type=float, default=4.0, help="минимальная площадь объекта, мм^2")
@@ -769,6 +939,7 @@ def add_height_args(ap):
     ap.add_argument("--click-range", type=float, default=1.0, help="клик: +-мм вокруг высоты по карте")
     ap.add_argument("--max-sigma", type=float, default=0.05,
                     help="клик: допустимая погрешность (СКО среднего по кадрам), мм")
+    ap.add_argument("--analysis-out", type=Path, help="Сохранить пересчёт --from-scan в новом каталоге без GUI")
     ap.add_argument("--from-scan", type=str, default=None, help="разобрать сохранённый скан (без камеры и станка)")
     return ap
 
@@ -777,19 +948,37 @@ def height_settings(args):
     """Settings needed to reproduce the same Z data from the same frames."""
     keys = ('max_height','below','sweep_step','map_views','min_map_views','win','min_texture','min_score',
             'peak_margin','texture_ratio','highpass','fill_planes','fill_tol','fill_min_area','fill_margin',
-            'table_near','min_height','min_area','patch','click_range','max_sigma')
+            'references','cell_mm','agree_mm','table_near','pose_tag_height','table_roi','min_height','min_area','patch','click_range','max_sigma')
     return {key:getattr(args,key) for key in keys if hasattr(args,key)}
+
+
+def replay_args(parser, meta, argv=None):
+    defaults = height_settings(add_height_args(argparse.ArgumentParser()).parse_args([]))
+    saved = meta.get("height_settings", {})
+    restored = {k: saved[k] for k in defaults if k in saved}
+    if '--table-roi' in (sys.argv[1:] if argv is None else argv):
+        restored.pop('table_roi', None)
+    parser.set_defaults(**restored)
+    return parser.parse_args(argv)
 
 
 def run_offline(args):
     frames, meta = load_scan(args.from_scan)
     g = meta["guess"]
     gp = meta.get("global_plane")
-    scan = ScanResult(frames, meta["positions"], meta["ref_index"], meta["camera_matrix"],
+    scan = ScanResult(frames, stereo_positions(frames, meta, args), meta["ref_index"], meta["camera_matrix"],
                       np.array(meta["dist_coeffs"]), meta["model"], meta["V_cam"],
                       (np.array(g["n"]), g["d"], g["kind"]),
                       None if gp is None else (np.array(gp["n"]), gp["d"]), args)
     scan.report()
+    if args.analysis_out:
+        folder = Path(args.analysis_out)
+        folder.mkdir(parents=True, exist_ok=False)
+        scan.save_analysis(folder)
+        settings = dict(height_settings=height_settings(args), pose_fit=meta.get("pose_fit") if args.pose_tag_height is not None else None,
+                        source=str(Path(args.from_scan).resolve()), opencv=cv2.__version__, numpy=np.__version__)
+        (folder / 'replay.json').write_text(json.dumps(settings, indent=2), encoding='utf-8')
+        return
     win = MapWindow()
     sel = None
     win.show(scan.render())
@@ -818,7 +1007,8 @@ def main():
     add_height_args(ap)
     args = ap.parse_args()
     if args.from_scan:
-        return run_offline(args)
+        meta = json.loads((Path(args.from_scan) / "scan.json").read_text(encoding="utf-8"))
+        return run_offline(replay_args(ap, meta))
 
     cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
     frame = read_frame(cap)
@@ -828,7 +1018,15 @@ def main():
         cap.release()
         raise SystemExit(f"нет достоверной калибровки камеры {args.camera} для {size[0]}x{size[1]} - запустите с тем же "
                          f"--width/--height, что при калибровке")
+    try:
+        actual = verify_focus(cap, calib["mode"].get("focus"))
+    except ValueError as exc:
+        cap.release()
+        raise SystemExit(str(exc)) from exc
+    args.camera_mode = capture_mode(cap, size, args.fourcc)
+    args.verified_focus = actual
     tool = HeightTool(cap, args, WindowUI(f"measure_height [{args.camera}]"), calib, calib_path, map_window=MapWindow())
+    tool.focus = actual
     tool.say(f"калибровка: {calib_path.name} ({calib['model']}, RMS {calib['rms']:.2f} px)")
     if tool.table_plane is None:
         tool.say("плоскость меток ещё не измерена - после k сделайте t (или высоты только от стола в кадре)")

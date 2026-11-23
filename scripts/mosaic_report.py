@@ -3,6 +3,9 @@ import argparse
 import json
 from pathlib import Path
 import numpy as np
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from common.registration import navigation_quality
 
 
 def main():
@@ -15,6 +18,8 @@ def main():
         good=[e for e in edges if e.get('valid')]
         print(f'{folder.name}: complete={m["complete"]}, coverage={m["coverage_fraction"]:.1%}, accepted pairs={len(good)}/{len(edges)}')
         print('closure (command mm):',m.get('closure_command_mm','unavailable'))
+        quality = navigation_quality(m)
+        print('XY navigation:', quality, 'return to observed start:', m.get('return_to_start_mm'))
         if m.get('trial'):
             records = m['records']
             settled = [np.linalg.norm(r['trial_marker_error_mm']) for r in records if 'trial_marker_error_mm' in r]

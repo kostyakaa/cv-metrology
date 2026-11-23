@@ -192,7 +192,8 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
     nl = len(heights)
     # гомографии (выход -> вход) для каждого уровня и кадра
     Hs = [[K @ (np.eye(3) - np.outer(O, n) / (d0 - h)) @ Kinv for O in Os] for h in heights]
-    lin = cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP
+    # Cubic intensity resampling reduces fractional-pixel smoothing bias in the ZNCC peak.
+    photo_interp = cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP
     near = cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP
 
     best = np.full((hh, ww), -2, np.float32)
@@ -240,7 +241,7 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
             if support is not None:
                 support[:] = 0
             for img, m_win, H in zip(imgs, wins, Hb[i]):
-                cv2.warpPerspective(img, H, sz, dst=w, flags=lin)
+                cv2.warpPerspective(img, H, sz, dst=w, flags=photo_interp)
                 cv2.warpPerspective(m_win, H, sz, dst=ok, flags=near)
                 np.multiply(w, w, out=ww2)
                 np.multiply(ref_s, w, out=rw)
@@ -382,7 +383,7 @@ def _peak(hs, s):
 
 
 def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, min_std=3.0,
-                 ref_valid=None, robust=False, texture_ratio=.045):
+                 ref_valid=None, robust=False, texture_ratio=.045, others_valid=None):
     """Высота точки x (пиксель опорного кадра) над плоскостью n·X = d0: шаблон вокруг x ищется в каждом кадре
     вдоль её эпиполярной линии (только высоты h_lo..h_hi), корреляции всех кадров складываются по высоте.
     Возвращает dict: h, score, X (3D), h_views (по каждому кадру отдельно), sigma; либо {'error': ...}."""
@@ -409,7 +410,7 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
     h_views, s_views = [], []
     curves = []
     leverage = []
-    for img, O in zip(others, Os):
+    for view_index, (img, O) in enumerate(zip(others, Os)):
         P = (K @ (X - np.asarray(O)).T).T
         p = P[:, :2] / P[:, 2:3]
         x0, y0 = np.floor(p.min(axis=0)).astype(int) - r - 2
@@ -421,6 +422,13 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
         roi = img[y0:y1, x0:x1].astype(np.float32)
         R = cv2.matchTemplate(roi, tpl, cv2.TM_CCOEFF_NORMED)
         s = _sample(R, p - np.array([x0 + r, y0 + r]))
+        if others_valid is not None:
+            centre_ok = cv2.erode(others_valid[view_index][y0:y1, x0:x1].astype(np.uint8),
+                                  np.ones(tpl.shape, np.uint8), borderType=cv2.BORDER_CONSTANT, borderValue=0)
+            ux, uy = np.rint(p - [x0, y0]).astype(int).T
+            inside = (ux >= 0) & (ux < centre_ok.shape[1]) & (uy >= 0) & (uy < centre_ok.shape[0])
+            inside[inside] = centre_ok[uy[inside], ux[inside]] > 0
+            s[~inside] = np.nan
         ok = np.isfinite(s)
         if ok.sum() < 3:
             continue
@@ -434,11 +442,16 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
     if len(h_views) < 2:
         return {"error": "точку видно меньше чем в 2 кадрах скана"}
     full = count == count.max()
+    if robust:
+        full = count >= max(3, int(np.ceil(.7 * count.max())))
+    if not full.any():
+        return {"error": "мало совместно видимых ракурсов"}
+
     S = np.where(full, total / np.maximum(count, 1), np.nan)
     h, score, i = _peak(hs, S)
     edge = i in (0, len(hs) - 1)
     rivals = S[(np.abs(hs-h) >= .8) & np.isfinite(S)]
-    margin = float(score-rivals.max()) if len(rivals) else float('inf')
+    margin = float(score-rivals.max()) if len(rivals) else 0.0
     hv, sv, leverage = map(np.asarray,(h_views,s_views,leverage))
     good = sv > .5
     if robust:
@@ -454,7 +467,7 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
     Xh = ((d0 - h) / (np.asarray(n) @ ray)) * ray
     sigma = float(np.std(hv[good], ddof=1) / np.sqrt(good.sum())) if good.sum() >= 3 else float("nan")
     return {"h": float(h), "score": float(score), "X": Xh, "h_views": h_views, "s_views": s_views,
-            "sigma": sigma, "at_range_edge": bool(edge), "views": int(count.max()),
+            "sigma": sigma, "at_range_edge": bool(edge), "views": int(count[i]),
             "inlier_views": good.tolist(), "peak_margin":margin}
 
 

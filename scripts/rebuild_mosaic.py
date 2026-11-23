@@ -10,7 +10,7 @@ import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'z')]
 from common.mosaic import Mosaic
-from common.registration import register
+from common.registration import register, navigation_quality
 from stereo import Rectifier
 
 
@@ -58,6 +58,7 @@ def rebuild(folder, out, ppm=None, fused=True):
     blend = 'single-source-detail-blended-lighting' if fused else 'central-source-single-resample'
     meta.update(ppm=ppm,model=model,blend=blend,source_scan=str(folder),
                 coverage_fraction=float(np.count_nonzero(m.weight)/np.count_nonzero(m.region)))
+    meta['navigation_quality'] = navigation_quality(meta)
     images = {'mosaic.png': m.image(), 'coverage.png': (m.weight>0).astype(np.uint8)*255}
     if fused:
         meta['tile_index'] = 'tile_index.png'

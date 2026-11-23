@@ -15,6 +15,7 @@ for p in (HERE, HERE.parent, HERE.parent / "scripts"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from pose_refinement import stereo_positions
 from measure_height import add_height_args, height_settings, load_scan, ScanResult
 from stereo import height_support
 import make_model
@@ -63,7 +64,7 @@ def main():
 
     print("Пересчет карты высот...")
     scan = ScanResult(
-        frames, meta["positions"], meta["ref_index"],
+        frames, stereo_positions(frames, meta, args), meta["ref_index"],
         meta["camera_matrix"], np.array(meta["dist_coeffs"]), meta["model"],
         meta["V_cam"], (np.array(g["n"]), g["d"], g["kind"]),
         None if gp is None else (np.array(gp["n"]), gp["d"]),

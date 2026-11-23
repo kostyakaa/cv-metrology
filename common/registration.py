@@ -98,6 +98,25 @@ def projected_points(position, local, scale):
     return xy
 
 
+def navigation_quality(meta):
+    """Coarse binding gate. Passing this check does not certify positioning accuracy."""
+    reasons = []
+    if not meta.get('complete'):
+        reasons.append('маршрут не завершён')
+    closure = np.asarray(meta.get('closure_command_mm'), dtype=float)
+    if closure.shape != (2,) or not np.isfinite(closure).all() or np.linalg.norm(closure) > .5:
+        reasons.append('замыкание отсутствует или превышает 0,5 мм')
+    if 'return_to_start_mm' in meta:
+        drift = np.asarray(meta['return_to_start_mm'], float)
+        if drift.shape != (2,) or not np.isfinite(drift).all() or np.linalg.norm(drift) > .5:
+            reasons.append('возврат к начальному наблюдению превышает 0,5 мм')
+    reg = meta.get('registration') or {}
+    ids = sorted({a['marker'] for a in reg.get('anchors', [])})
+    if len(ids) < 3:
+        reasons.append('меньше трёх различных опорных меток')
+    return dict(usable=not reasons, reasons=reasons, marker_ids=ids)
+
+
 def marker_anchors(observations, meta):
     """Older scans save corner coordinates without IDs. Resolve only unique near-vertex matches."""
     polygon = np.array(meta['polygon'])
@@ -209,6 +228,14 @@ def register(folder, meta, K, D, model):
                 xy = plane_points(corners, K, D, model, np.array(r['H'])).mean(axis=0)
                 observations.append((i, mid, xy))
     anchors = marker_anchors(observations, meta)
+    accepted = {(a['i'], a['marker']) for a in anchors}
+    layout = meta.get('marker_positions', {})
+    marker_observations = []
+    for i, mid, xy in observations:
+        target = layout.get(str(mid))
+        residual = None if target is None else (xy - np.asarray(target)).tolist()
+        marker_observations.append(dict(frame=i, marker=mid, xy=xy.tolist(), residual_mm=residual,
+                                        accepted=(i, mid) in accepted))
     for anchor in anchors:
         i, mid = anchor['i'], anchor['marker']
         xy = next(p for k, m, p in observations if k == i and m == mid)
@@ -302,6 +329,7 @@ def register(folder, meta, K, D, model):
                 xy = np.zeros(2)
         trajectory.append(dict(segment=segment, xy_mm=xy.tolist(), source=source))
     return offsets, scale, dict(method='optical-grbl-plane-v1', pairs=measured, anchors=anchors,
+                         marker_observations=marker_observations,
                          scale_grid=dict(origin=scale.origin.tolist(), spacing=scale.spacing, values=scale.field.tolist()),
                          optical_trajectory=trajectory, optical_positions=optical_coordinates(tags,measured,records),
                          validation=checks)

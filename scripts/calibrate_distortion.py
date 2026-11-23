@@ -61,10 +61,10 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
-from common.camera import load_saved_focus, open_camera, read_frame, set_focus  # noqa: E402
+from common.camera import load_saved_focus, open_camera, read_frame, set_focus, verify_focus  # noqa: E402
 from common.display import add_zoom_trackbar, draw_texts, get_zoom, show_scaled, text_px  # noqa: E402
 from common.grbl import Grbl, GrblAborted, GrblError  # noqa: E402
-from common.geometry import machine_motion  # noqa: E402
+from common.geometry import machine_motion, undistort_points  # noqa: E402
 from common.markers import CHARUCO_BOARDS, make_charuco_board  # noqa: E402
 
 COVERAGE_GRID = (8, 6)
@@ -303,6 +303,24 @@ def calibrate_pinhole(views, image_size, rational=False, K0=None):
     return rms, K, D, errs
 
 
+def fit_pinhole_multistart(views, size, rational):
+    """The unconstrained initialization can converge to an implausible focal length on XY grids."""
+    width, height = size
+    solutions = []
+    for focal in (None, .55*width, width):
+        initial = None if focal is None else np.array([[focal, 0., (width-1)/2],
+                                                       [0., focal, (height-1)/2], [0., 0., 1.]])
+        try:
+            candidate = calibrate_pinhole(views, size, rational, initial)
+        except cv2.error:
+            continue
+        if all(np.isfinite(v).all() for v in candidate[:3]):
+            solutions.append(candidate)
+    if not solutions:
+        raise ValueError("Подбор pinhole не сошёлся ни из одного начального приближения")
+    return min(solutions, key=lambda result: result[0])
+
+
 def reliability(views, image_size, K, D, model, rms):
     """Достоверна ли калибровка. Главная проверка: решение заново из фокусного в 2 раза меньше/больше -
     если фокусное 'уплывает', кадры его не определяют (мало наклонов) и параметры - случайные числа."""
@@ -392,6 +410,41 @@ def print_camera_report(K, D, image_size, rms, errs, pixel_size_um=None):
         print(f"    кадр {i:2d}: {e:.3f} px{mark}")
 
 
+def heldout_board(views, size, rational):
+    """Hold out complete poses and a disjoint set of corners for each validation pose."""
+    train = [v for i, v in enumerate(views, 1) if i % 4]
+    test = [v for i, v in enumerate(views, 1) if not i % 4]
+    if len(train) < 8 or not test:
+        return None
+    _, K, D, _ = fit_pinhole_multistart(train, size, rational)
+    samples = []
+    for obj, img in test:
+        fit = np.arange(len(obj)) % 2 == 0
+        if fit.sum() < 6 or np.linalg.matrix_rank(obj[fit, :2] - obj[fit, :2].mean(axis=0)) < 2:
+            continue
+        ok, rv, tv = cv2.solvePnP(obj[fit], img[fit], K, D)
+        if not ok:
+            continue
+        points = img[~fit]
+        predicted = cv2.projectPoints(obj[~fit], rv, tv, K, D)[0].reshape(-1, 2)
+        corrected = undistort_points(points, K, D, 'pinhole', P=None).reshape(-1, 2)
+        rays = np.column_stack([corrected, np.ones(len(points))])
+        R = cv2.Rodrigues(rv)[0]
+        normal = R[:, 2]
+        world = (rays * ((normal @ tv.ravel()) / (rays @ normal))[:, None] - tv.ravel()) @ R
+        edge = np.max(np.abs(2 * points / size - 1), axis=1) >= .75
+        samples.extend(zip(edge, np.linalg.norm(points-predicted, axis=1),
+                           np.linalg.norm(world[:, :2]-obj[~fit, :2], axis=1)))
+    values = np.asarray(samples, float).reshape(-1, 3)
+    def stats(rows):
+        if not len(rows):
+            return None
+        return dict(count=len(rows), p95_px=float(np.percentile(rows[:, 1], 95)),
+                    p95_board_mm=float(np.percentile(rows[:, 2], 95)))
+    return dict(train_poses=len(train), heldout_poses=len(test), all=stats(values),
+                border=stats(values[values[:, 0] > 0]))
+
+
 def save_calib(path, K, D, image_size, model, rms, errs, mode, check=None, reliable=True, notes=()):
     data = {"model": model, "image_size": list(image_size), "camera_matrix": K.tolist(),
             "dist_coeffs": D.tolist(), "rms": float(rms), "per_view_rms": errs, "mode": mode,
@@ -451,11 +504,14 @@ def main():
     ap.add_argument("--calib", type=str, default=None, help="файл калибровки (куда сохранить / что загрузить)")
     ap.add_argument("--from-dir", type=str, default=None, help="посчитать по сохранённым кадрам вместо съёмки")
     ap.add_argument("--undistort-only", action="store_true", help="не калибровать, только live undistort по --calib")
+    ap.add_argument("--board-above-table", type=float, help="Измеренная высота рисунка лежащей доски над столом, мм")
     ap.add_argument("--pixel-size-um", type=float, default=None, help="размер пикселя сенсора, мкм (для f в мм)")
     args = ap.parse_args()
 
     model = "fisheye" if args.fisheye else ("pinhole_rational" if args.rational else "pinhole")
 
+    if args.board_above_table is not None and not np.isfinite(args.board_above_table):
+        ap.error("--board-above-table должен быть конечным")
     if args.undistort_only:
         if not args.calib:
             print("Для --undistort-only нужен --calib <файл калибровки>")
@@ -491,11 +547,11 @@ def main():
         board = make_charuco_board(**CHARUCO_BOARDS[args.board])
         cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
         focus = args.focus if args.focus is not None else load_saved_focus(args.camera)
-        if args.focus is not None:
-            set_focus(cap, args.focus)
-        if focus is None:
-            print("ВНИМАНИЕ: фокус не зафиксирован - автофокус меняет масштаб и калибровка поплывёт. "
-                  "Сначала autofocus.py / detect_markers.py (f) или передайте --focus N.")
+        try:
+            focus = verify_focus(cap, focus)
+        except ValueError as exc:
+            cap.release()
+            raise SystemExit(f"Перед съёмкой задайте ручной --focus. {exc}") from exc
         capture = Capture(cap, args, board, cv2.aruco.CharucoDetector(board))
         try:
             finished = capture.run()
@@ -506,6 +562,8 @@ def main():
                 "autofocus": 0 if focus is not None else 1, "focus": focus, "board": board_params,
                 "grbl_settings": capture.grbl_settings,
                 "machine_offsets": {n: o for n, o in zip(capture.names, offsets) if o is not None}}
+        if args.board_above_table is not None:
+            mode["board_above_table_mm"] = args.board_above_table
         if frames_dir is not None:
             (frames_dir / "mode.json").write_text(json.dumps(mode, indent=2), encoding="utf-8")
             mode["frames_dir"] = str(frames_dir)
@@ -532,8 +590,8 @@ def main():
         if args.fisheye:
             rms, K, D, errs = calibrate_fisheye(views, size)
         else:
-            rms, K, D, errs = calibrate_pinhole(views, size, rational=args.rational)
-    except cv2.error as e:
+            rms, K, D, errs = fit_pinhole_multistart(views, size, args.rational)
+    except (ValueError, cv2.error) as e:
         print("Калибровка не сошлась:", e)
         print("Нужно больше кадров, разные наклоны доски и углы у краёв кадра.")
         if cap is not None:
@@ -543,9 +601,23 @@ def main():
     print_camera_report(K, D, size, rms, errs, args.pixel_size_um)
     reliable, notes = reliability(views, size, K, D, model, rms)
     check = machine_check(views, offsets, K, D, model) if reliable else None
+    if args.board_above_table is not None:
+        mode["board_above_table_mm"] = args.board_above_table
+    if check and mode.get("board_above_table_mm") is not None:
+        check["camera_to_table_at_grid_origin_mm"] = check["camera_height_mm"] + mode["board_above_table_mm"]
+    mode["opencv_version"] = cv2.__version__
+    if model.startswith("pinhole"):
+        try:
+            mode["heldout_board"] = heldout_board(views, size, args.rational)
+        except (cv2.error, ValueError) as exc:
+            mode["heldout_board"] = {"error": str(exc)}
+            reliable = False
+            notes.append("Подгонка на отложенном разбиении не сошлась")
+        print("Контроль на отложенных позах:", mode["heldout_board"])
+    focus_tag = mode.get("focus")
     suffix = "" if reliable else "_unreliable"
     calib_path = Path(args.calib) if args.calib else \
-        ROOT / "calib" / f"calib_cam{camera_index}_{size[0]}x{size[1]}_{model}{suffix}.json"
+        ROOT / "calib" / f"calib_cam{camera_index}_{size[0]}x{size[1]}_{model}_f{focus_tag}_{time.strftime('%Y%m%d-%H%M%S')}{suffix}.json"
     save_calib(calib_path, K, D, size, model, rms, errs, mode, check, reliable, notes)
     if reliable:
         print("Проверка достоверности: пройдена (фокусное устойчиво к начальному приближению)")

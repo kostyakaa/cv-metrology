@@ -5,6 +5,7 @@
 (realtime-байт 0x85: плавная остановка с сохранением позиции) и он не меняет
 модальное состояние G-кода (G90/G91, подача) - безопасно для ручной отладки.
 """
+import math
 import time
 
 JOG_CANCEL = b"\x85"
@@ -87,12 +88,17 @@ class Grbl:
     def _parse_status(self, line):
         self.last_status_time = time.monotonic()
         fields = line.strip("<>").split("|")
+        self.reported_position = None
+        self.reported_frame = None
         self.state = fields[0].split(":")[0]
         for f in fields[1:]:
             key, _, val = f.partition(":")
             if key in ("MPos", "WPos", "WCO"):
                 xyz = [float(v) for v in val.split(",")]
                 setattr(self, key.lower(), xyz)
+                if key in ("MPos", "WPos") and (self.reported_position is None or key == "MPos"):
+                    self.reported_position = xyz
+                    self.reported_frame = key
 
     def status(self, timeout=1.0):
         self.link.write(b"?")
@@ -111,8 +117,8 @@ class Grbl:
         """XY для относительных расчётов: MPos (по умолчанию, $10=1) или WPos ($10=0) - всегда одна и та же
         система (WCO в отчёте приходит не каждый раз, смешивать нельзя)."""
         self.status()
-        p = self.mpos if self.mpos is not None else self.wpos
-        if p is None:
+        p = self.reported_position
+        if p is None or len(p) < 2 or not all(math.isfinite(v) for v in p[:2]):
             raise GrblError("GRBL не сообщает позицию")
         return p[0], p[1]
 
@@ -123,6 +129,29 @@ class Grbl:
         state = self.status()
         if state != "Idle":
             raise GrblError(f"станок не в Idle, а в {state} (Alarm - разблокировка $X, Hold - продолжение ~)")
+
+    def z_position(self):
+        self.status()
+        p = self.reported_position
+        if p is None or len(p) < 3 or not math.isfinite(p[2]):
+            raise GrblError("Контроллер не сообщает координату Z")
+        return float(p[2])
+
+    def jog_z(self, dz, feed, tick=None):
+        """A separate Z-only jog used by the bounded focus-stack acquisition."""
+        if not math.isfinite(dz) or not math.isfinite(feed) or feed < 1:
+            raise ValueError("Некорректный ход или подача Z")
+        self.require_idle()
+        if round(dz, 3) == 0:
+            return
+        try:
+            self.cmd(f"$J=G21G91Z{dz:.3f}F{feed:.0f}")
+            self.wait_idle(tick, timeout=60*abs(dz)/feed*1.5 + 5)
+        except GrblAborted:
+            raise
+        except (Exception, KeyboardInterrupt):
+            self.cancel()
+            raise
 
     def jog(self, dx, dy, feed, tick=None):
         """Относительный ход XY и ожидание конца. tick() вызывается во время хода; True -> отмена."""
