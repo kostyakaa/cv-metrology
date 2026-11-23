@@ -1,10 +1,33 @@
 import unittest
 import cv2
 import numpy as np
-from common.mosaic import pixel_to_machine, overlap_error, Mosaic
+from common.mosaic import pixel_to_machine, overlap_error, target_displacement, Mosaic
 
 
 class MosaicTests(unittest.TestCase):
+    def test_visual_docking_with_lighting_change_and_ambiguous_grooves(self):
+        rng = np.random.default_rng(12)
+        ref = cv2.GaussianBlur(rng.integers(28,195,(193,193,3),dtype=np.uint8),(3,3),0)
+        mask = np.ones(ref.shape[:2],bool)
+        shift = np.float32([[1,0,8.5],[0,1,-5.2]])
+        live = cv2.warpAffine(ref,shift,(193,193))
+        live = np.clip(live.astype(float)*1.05+28,0,255).astype(np.uint8)
+        np.testing.assert_allclose(target_displacement(ref,live,mask,16),[8.5/16,-5.2/16],atol=.02)
+        grooves = np.tile((np.arange(193)%16<8)[:,None,None],(1,193,3)).astype(np.uint8)*150
+        self.assertIsNone(target_displacement(grooves,grooves,mask,16))
+
+    def test_lighting_blend_reduces_jump_at_tile_boundary(self):
+        polygon = [[0,0],[18,0],[18,10],[0,10]]
+        a = np.full((101,121,3),65,np.uint8)
+        b = np.full_like(a,155)
+        mosaics = [Mosaic(polygon,10,blend_lighting=blend) for blend in (False,True)]
+        for m in mosaics:
+            for x,img in ((0,a),(6,b)):
+                H = np.float64([[.1,0,x],[0,.1,0],[0,0,1]])
+                m.add(img,np.ones(img.shape[:2],bool),H,[x,0],diagnose=False)
+        old,new = (np.diff(m.image()[50,:,0].astype(float)) for m in mosaics)
+        self.assertGreater(old.max(),75)
+        self.assertLess(new.max(),10)
     def test_overlap_does_not_average_misaligned_edges(self):
         m=Mosaic([[0,0],[10,0],[10,10],[0,10]],10)
         a=np.zeros((101,101,3),np.uint8);a[:,50:]=255

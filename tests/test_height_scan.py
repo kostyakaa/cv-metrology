@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "z"))
 from measure_height import HeightTool, Abort, add_height_args
-from stereo import plane_homography, plane_sweep
+from stereo import find_objects, plane_homography, plane_sweep
 
 
 class PlanningTests(unittest.TestCase):
@@ -56,6 +56,15 @@ class PlanningTests(unittest.TestCase):
 
 
 class ReconstructionTests(unittest.TestCase):
+    def test_supported_surface_ignores_isolated_high_spikes(self):
+        h = np.full((45,81),np.nan,dtype=np.float32)
+        h[7:36,7:70:3] = 10.0
+        h[7:36,8:70:3] = 10.05
+        h[21,24:65:5] = 21
+        [part] = find_objects(h,np.isfinite(h), min_area_px=100)
+        self.assertAlmostEqual(part['height_top'],10,delta=.06)
+        self.assertLess(part['height_max'],11)
+
     def test_view_count_above_uint8_limit(self):
         rng = np.random.default_rng(11)
         texture = rng.uniform(0, 255, (60, 88)).astype(np.float32)

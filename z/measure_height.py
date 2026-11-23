@@ -113,7 +113,8 @@ class ScanResult:
         self.hmap, self.score, self.valid = plane_sweep(
             match_ref, others, [self.Os[i] for i in indices], self.Ks, n0, d0, heights, ref_valid=vh,
             others_valid=[vh] * len(others), win=args.win, min_std=args.min_texture, min_score=args.min_score,
-            min_views=args.min_map_views, tick=tick)
+            min_views=args.min_map_views, tick=tick,
+            peak_margin=getattr(args,'peak_margin',.045), texture_ratio=getattr(args,'texture_ratio',.045))
         log(f"карта высот: {len(heights)} уровней x {len(others)} кадров за {time.time() - t0:.0f} с, "
             f"определилось {100 * self.valid.mean():.0f}% кадра")
         self.X = points_from_heights(self.hmap, self.Ks, n0, d0)
@@ -191,22 +192,32 @@ class ScanResult:
     def measure(self, x_full):
         a = self.args
         h_map = self.table_height_at(x_full)
-        if h_map is not None:
-            lo, hi = h_map - a.click_range, h_map + a.click_range
-        else:
-            lo, hi = -a.below, a.max_height
         mf = self.match_full()
-        res = refine_point(mf[0], mf[1:], self.Os[1:], self.K, self.n_t, self.d_t, x_full, lo, hi,
-                           patch=a.patch, min_std=a.min_texture, ref_valid=self.valid_full)
+        limits = -a.below,min(a.max_height,self.d_t-1.)
+        def measure_in(lo,hi):
+            return refine_point(mf[0],mf[1:],self.Os[1:],self.K,self.n_t,self.d_t,x_full,lo,hi,
+                                patch=a.patch,min_std=a.min_texture,ref_valid=self.valid_full,robust=True,
+                                texture_ratio=getattr(a,'texture_ratio',.045))
+        def reliable(res):
+            return ('error' not in res and res['score'] > .6 and sum(res['inlier_views']) >= 3
+                    and res['sigma'] < a.max_sigma and res['peak_margin'] >= .045 and not res['at_range_edge'])
+        window = limits if h_map is None else (max(limits[0],h_map-a.click_range),min(limits[1],h_map+a.click_range))
+        if window[1]-window[0] < .03:
+            window = limits
+        res = measure_in(*window)
+        # A weak dense-map seed should not confine a click to the wrong height band.
+        if window != limits and 'error' not in res and not reliable(res):
+            alternative = measure_in(*limits)
+            if reliable(alternative):
+                res = alternative
         if "error" in res:
             return res
         res["h_map"] = h_map
         res["machine_xy"] = (self.c_ref + under_camera(self.V, res["X"])).tolist()
-        good = np.array(res["s_views"]) > 0.5
+        good = np.array(res["inlier_views"],dtype=bool)
         hv = np.array(res["h_views"])[good]
         res["spread"] = float(hv.max() - hv.min()) if hv.size >= 2 else float("nan")
-        res["reliable"] = bool(res["score"] > 0.6 and hv.size >= 3 and res["sigma"] < a.max_sigma
-                               and not res["at_range_edge"])
+        res["reliable"] = bool(reliable(res))
         res["x"] = [float(x_full[0]), float(x_full[1])]
         return res
 
@@ -293,6 +304,8 @@ def sweep_levels(args, distance):
             or below < 0 or above < 0 or above + step / 2 >= distance
             or (below + above) / step < 1.5):
         raise ValueError("Проверьте --sweep-step, --below и --max-height: нужны три уровня перед камерой")
+    if not (0 <= getattr(args,'peak_margin',.045) <= 2 and 0 <= getattr(args,'texture_ratio',.045) <= .5):
+        raise ValueError("Пороги --peak-margin и --texture-ratio должны лежать в [0,2] и [0,0.5]")
     return np.arange(-below, above + step / 2, step)
 
 
@@ -621,7 +634,8 @@ class HeightTool(Survey):
                 "V_cam": self.V.tolist(), "guess": {"n": guess[0].tolist(), "d": guess[1], "kind": guess[2]},
                 "global_plane": None if global_plane is None else {"n": global_plane[0].tolist(), "d": global_plane[1]},
                 "grid": self.args.grid, "baseline": self.scan_plan['actual_step_mm'],
-                "requested_baseline": self.args.baseline, "scan_plan": self.scan_plan}
+                "requested_baseline": self.args.baseline, "scan_plan": self.scan_plan,
+                "height_settings": height_settings(self.args)}
         folder = self.scans_dir / time.strftime("scan_%Y%m%d-%H%M%S")
         save_scan(folder, frames, shot_pos, ref_index, meta)
         self.say(f"кадры скана сохранены: {folder}")
@@ -734,6 +748,10 @@ def add_height_args(ap):
     ap.add_argument("--win", type=int, default=9, help="окно сравнения для карты, px (половинное разрешение)")
     ap.add_argument("--min-texture", type=float, default=2.0, help="минимальная текстура (СКО яркости в окне)")
     ap.add_argument("--min-score", type=float, default=0.5, help="минимальная корреляция кадров для карты")
+    ap.add_argument("--peak-margin", type=float, default=.045,
+                    help="минимальный отрыв от альтернативной высоты по корреляции (0 отключает проверку)")
+    ap.add_argument("--texture-ratio", type=float, default=.045,
+                    help="минимальная доля градиента поперёк основной текстуры (0 отключает проверку)")
     ap.add_argument("--highpass", type=float, default=4.0,
                     help="сопоставление по кадрам без плавной засветки: из кадра вычитается его размытая копия "
                          "(σ, px половинного разрешения); 0 - выкл")
@@ -753,6 +771,14 @@ def add_height_args(ap):
                     help="клик: допустимая погрешность (СКО среднего по кадрам), мм")
     ap.add_argument("--from-scan", type=str, default=None, help="разобрать сохранённый скан (без камеры и станка)")
     return ap
+
+
+def height_settings(args):
+    """Settings needed to reproduce the same Z data from the same frames."""
+    keys = ('max_height','below','sweep_step','map_views','min_map_views','win','min_texture','min_score',
+            'peak_margin','texture_ratio','highpass','fill_planes','fill_tol','fill_min_area','fill_margin',
+            'table_near','min_height','min_area','patch','click_range','max_sigma')
+    return {key:getattr(args,key) for key in keys if hasattr(args,key)}
 
 
 def run_offline(args):

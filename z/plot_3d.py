@@ -15,22 +15,24 @@ for p in (HERE, HERE.parent, HERE.parent / "scripts"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from measure_height import load_scan, ScanResult
+from measure_height import add_height_args, height_settings, load_scan, ScanResult
+from stereo import height_support
 import make_model
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("scan_dir")
     ap.add_argument("--downsample", type=int, default=5)
-    ap.add_argument("--max-height", type=float, default=15.0)
-    ap.add_argument("--min-score", type=float, default=0.35, help="Порог ZNCC при расчете карты")
-    ap.add_argument("--min-point-score", type=float, default=0.5, help="Отсечь готовые точки с уверенностью ниже этой")
-    ap.add_argument("--win", type=int, default=9)
-    ap.add_argument("--map-views", type=int, default=0, help="лимит дополнительных ракурсов (0 — все)")
-    ap.add_argument("--min-map-views", type=int, default=4, help="минимум ракурсов для точки карты")
+    ap.add_argument("--max-height", type=float, help="переопределить диапазон расчёта карты")
+    ap.add_argument("--min-score", type=float, help="переопределить порог ZNCC")
+    ap.add_argument("--min-point-score", type=float, help="дополнительный порог для отображаемых точек")
+    ap.add_argument("--win", type=int)
+    ap.add_argument("--map-views", type=int, help="лимит дополнительных ракурсов (0 — все)")
+    ap.add_argument("--min-map-views", type=int, help="минимум ракурсов для точки карты")
+    ap.add_argument("--out", type=Path, help="записать PNG по указанному пути")
 
     # Настройки SOR (фильтра выбросов)
-    ap.add_argument("--sor-k", type=int, default=20, help="Сколько соседей проверять (больше = строже)")
+    ap.add_argument("--sor-k", type=int, default=0, help="число соседей SOR (0 показывает все измеренные точки)")
     ap.add_argument("--sor-scale", type=float, default=1.5, help="Порог отсечения (меньше = строже)")
     ap.add_argument("--no-filled", action="store_true",
                     help="Не показывать достроенное по плоскости (однотонная маска платы, места под бликом)")
@@ -43,18 +45,18 @@ def main():
                          "model - достроенная 2.5D-модель: верх целиком, стенки до стола (STL - z/make_model.py)")
 
     args_cli = ap.parse_args()
-    if args_cli.downsample < 1 or args_cli.sor_k < 2 or not np.isfinite(args_cli.sor_scale) or args_cli.sor_scale <= 0:
-        ap.error("--downsample >= 1, --sor-k >= 2, --sor-scale > 0")
+    if (args_cli.downsample < 1 or args_cli.sor_k < 0 or args_cli.sor_k == 1
+            or not np.isfinite(args_cli.sor_scale) or args_cli.sor_scale <= 0):
+        ap.error("--downsample >= 1, --sor-k = 0 или >= 2, --sor-scale > 0")
 
     print(f"Загрузка скана {args_cli.scan_dir}...")
     frames, meta = load_scan(args_cli.scan_dir)
 
-    args = argparse.Namespace(
-        sweep_step=0.25, below=3.0, max_height=args_cli.max_height, map_views=args_cli.map_views,
-        win=args_cli.win, min_texture=2.0, min_score=args_cli.min_score, min_map_views=args_cli.min_map_views,
-        table_near=3.0, min_height=0.5, min_area=4.0, click_range=1.0,
-        patch=31, max_sigma=0.05,
-    )
+    defaults = add_height_args(argparse.ArgumentParser(add_help=False)).parse_args([])
+    settings = height_settings(defaults)
+    settings.update({key:value for key,value in meta.get('height_settings',{}).items() if key in settings})
+    settings.update({key:value for key,value in height_settings(args_cli).items() if value is not None})
+    args = argparse.Namespace(**settings)
 
     g = meta["guess"]
     gp = meta.get("global_plane")
@@ -67,6 +69,7 @@ def main():
         None if gp is None else (np.array(gp["n"]), gp["d"]),
         args, log=lambda m: print(f"  [ScanResult] {m}")
     )
+    scan.report()
 
     if args_cli.view == "model":
         top = make_model.build_model(scan)
@@ -76,14 +79,16 @@ def main():
         for line in make_model.describe(top, scan):
             print(line)
         title = f"2.5D-модель\n{args_cli.scan_dir}"
-        out_png = Path(args_cli.scan_dir) / "plot_3d_model.png"
+        out_png = args_cli.out or Path(args_cli.scan_dir) / "plot_3d_model.png"
         make_model.render(top, out_png, title=title)
         print(f"УСПЕХ! Модель сохранена в: {out_png}")
         if args_cli.show:
             make_model.render(top, show=True, title=title)
         return
 
-    valid = scan.valid
+    support = height_support(scan.ht,scan.valid)
+    valid = scan.valid & (support >= 11)
+    print(f"Точек с локальной поддержкой: {valid.sum()} из {scan.valid.sum()}")
     if not np.any(valid):
         print("Нет валидных точек!")
         return
@@ -94,7 +99,9 @@ def main():
     Scores = scan.score[valid] # <-- Достаем уверенность ZNCC
 
     # Отсекаем по высоте и уверенности
-    mask = (H > -1.0) & (H < args_cli.max_height) & (Scores >= args_cli.min_point_score)
+    mask = (H > -1.0) & (H < args.max_height)
+    if args_cli.min_point_score is not None:
+        mask &= Scores >= args_cli.min_point_score
     X_3d = X_3d[mask]
     H = H[mask]
 
@@ -106,7 +113,7 @@ def main():
     print(f"Точек до SOR: {len(X_3d)}")
 
     # --- SOR Фильтр ---
-    if len(X_3d) > 1:
+    if args_cli.sor_k and len(X_3d) > 1:
         print(f"Фильтрация выбросов (SOR, k={args_cli.sor_k}, scale={args_cli.sor_scale})...")
         tree = cKDTree(X_3d)
         dists, _ = tree.query(X_3d, k=min(len(X_3d), args_cli.sor_k))
@@ -130,7 +137,7 @@ def main():
     if filled is not None and filled.any() and not args_cli.no_filled:
         Xf = scan.X[filled][::step * 4]
         Hf = scan.ht[filled][::step * 4]
-        keep = (Hf > -1.0) & (Hf < args_cli.max_height)
+        keep = (Hf > -1.0) & (Hf < args.max_height)
         Xf, Hf = Xf[keep], Hf[keep]
         print(f"Достроенных точек (показано): {len(Xf)}")
 
@@ -138,7 +145,7 @@ def main():
     X_all = np.vstack([X_3d, Xf]) if len(Xf) else X_3d
     x_range = max(X_all[:, 0].max() - X_all[:, 0].min(), 1.0)
     y_range = max(X_all[:, 1].max() - X_all[:, 1].min(), 1.0)
-    z_range = max(args_cli.max_height - (-1), 0.2 * x_range)
+    z_range = max(1.,float(np.max(np.r_[H,Hf])))+1
     max_range = max(x_range, y_range, z_range)
     aspect = (x_range / max_range, y_range / max_range, z_range / max_range)
 
@@ -163,12 +170,12 @@ def main():
         ax.set_xlabel('X, мм')
         ax.set_ylabel('-Y, мм')
         ax.set_zlabel('Высота, мм')
-        ax.set_zlim(-1, args_cli.max_height)
+        ax.set_zlim(-1,z_range-1)
         ax.set_box_aspect(aspect)
         ax.view_init(elev=25, azim=-60)
         return fig
 
-    out_png = Path(args_cli.scan_dir) / "plot_3d_clean.png"
+    out_png = args_cli.out or Path(args_cli.scan_dir) / "plot_3d_clean.png"
     fig = draw(X_3d, H, Xf, Hf)
     fig.savefig(out_png, dpi=200, bbox_inches='tight')
     print(f"УСПЕХ! График сохранен в: {out_png}")

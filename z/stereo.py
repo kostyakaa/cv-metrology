@@ -138,7 +138,8 @@ def plane_homography(K, O, n, d):
 
 # ---------- плотная карта: перебор плоскостей, параллельных опорной
 def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid=None, win=9, min_std=2.0,
-                min_score=0.5, min_views=2, tick=None, workers=None, strip=None):
+                min_score=0.5, min_views=2, tick=None, workers=None, strip=None,
+                peak_margin=0., texture_ratio=0.):
     """Для каждого пикселя опорного кадра - высота h над плоскостью n·X = d0, при которой остальные кадры,
     перенесённые через плоскость n·X = d0 - h, лучше всего совпадают с опорным (средняя ZNCC в окне win).
     Возвращает (карта высот с NaN где не определилась, лучшая корреляция, маска достоверных).
@@ -168,6 +169,13 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
     mr = box(ref)
     vr = np.maximum(box(ref * ref) - mr * mr, 0)
     texture = vr > var_floor
+    if texture_ratio:
+        gx = cv2.Sobel(ref,cv2.CV_32F,1,0,scale=.125)
+        gy = cv2.Sobel(ref,cv2.CV_32F,0,1,scale=.125)
+        xx, yy, xy = box(gx*gx), box(gy*gy), box(gx*gy)
+        trace = xx+yy
+        low = .5*(trace - np.hypot(xx-yy,2*xy))
+        texture &= (low >= texture_ratio*trace) & (low > .12)
     if ref_valid is not None:
         texture &= cv2.erode(ref_valid.astype(np.uint8), np.ones((win, win), np.uint8)) > 0
     inv_sd = (1 / np.sqrt(np.maximum(vr, var_floor))).astype(np.float32)
@@ -191,6 +199,7 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
     best_i = np.full((hh, ww), -1, np.int32)
     s_before = best.copy()
     s_after = best.copy()
+    distinct = max(2,int(np.ceil(.8/(heights[1]-heights[0]))))
 
     # Кадр режется на горизонтальные полосы, каждая считается целиком (все уровни, все кадры) в своём потоке.
     # Полоса - с запасом r строк сверху и снизу: окна её строк видят настоящих соседей, результат тот же, что по
@@ -220,12 +229,16 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
         w, ok, ww2, rw, t1, t2, acc = f32(), np.empty((rows, ww), np.uint8), f32(), f32(), f32(), f32(), f32()
         count_type = np.uint8 if len(imgs) <= 255 else np.int32
         cnt = np.empty((rows, ww), count_type)
+        support = np.empty_like(cnt) if peak_margin else None
+        volume = np.full((nl,m_rows,ww),-2,np.float16) if peak_margin else None
         sc = np.empty((m_rows, ww), np.float32)
         for i in range(nl):
             if stop.is_set():
                 return
             acc[:] = 0
             cnt[:] = 0
+            if support is not None:
+                support[:] = 0
             for img, m_win, H in zip(imgs, wins, Hb[i]):
                 cv2.warpPerspective(img, H, sz, dst=w, flags=lin)
                 cv2.warpPerspective(m_win, H, sz, dst=ok, flags=near)
@@ -244,9 +257,16 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
                 np.clip(t2, -1, 1, out=t2)
                 cv2.add(acc, t2, dst=acc, mask=ok)
                 cv2.add(cnt, 1, dst=cnt, mask=ok)
+                if support is not None:
+                    agreeing = ok & (t2 > .35).astype(np.uint8)
+                    cv2.add(support,1,dst=support,mask=agreeing)
             a_s, c_s = acc[o:o + m_rows], cnt[o:o + m_rows]
             np.divide(a_s, np.maximum(c_s, 1), out=sc)
             sc[c_s < min_views] = -2
+            if support is not None:
+                votes = support[o:o + m_rows]
+                sc[(votes < min_views) | (votes < .55*c_s)] = -2
+                volume[i] = sc
             if i > 0:
                 m = bi == i - 1
                 sa[m] = sc[m]
@@ -256,6 +276,11 @@ def plane_sweep(ref, others, Os, K, n, d0, heights, ref_valid=None, others_valid
             bi[better] = i
             sp, sc = sc, sp  # sc перезаписывается на следующем уровне - меняем буферы местами
             progress[k] = i + 1
+        if volume is not None:
+            rival = np.full_like(bst,-2)
+            for i, layer in enumerate(volume):
+                np.maximum(rival,layer,out=rival,where=np.abs(bi-i)>=distinct)
+            bi[bst-rival < peak_margin] = -1
         best[y0:y1], best_i[y0:y1], s_before[y0:y1], s_after[y0:y1] = bst, bi, sb, sa
 
     workers = min(workers, len(bands) or 1)
@@ -356,7 +381,8 @@ def _peak(hs, s):
     return hs[i], s[i], i
 
 
-def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, min_std=3.0, ref_valid=None):
+def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, min_std=3.0,
+                 ref_valid=None, robust=False, texture_ratio=.045):
     """Высота точки x (пиксель опорного кадра) над плоскостью n·X = d0: шаблон вокруг x ищется в каждом кадре
     вдоль её эпиполярной линии (только высоты h_lo..h_hi), корреляции всех кадров складываются по высоте.
     Возвращает dict: h, score, X (3D), h_views (по каждому кадру отдельно), sigma; либо {'error': ...}."""
@@ -369,12 +395,20 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
         return {"error": "слишком близко к краю кадра"}
     if tpl.std() < min_std:
         return {"error": "в точке нет текстуры (однотонно) - высоту не по чему мерить"}
+    if robust and texture_ratio:
+        gx, gy = (cv2.Sobel(tpl,cv2.CV_32F,dx,dy,scale=.125) for dx,dy in ((1,0),(0,1)))
+        xx, yy, xy = np.mean(gx*gx), np.mean(gy*gy), np.mean(gx*gy)
+        low = .5*(xx+yy-np.hypot(xx-yy,2*xy))
+        if low < max(.12,texture_ratio*(xx+yy)):
+            return {"error": "текстура тянется в одну сторону, высота неоднозначна"}
     ray = np.linalg.inv(K) @ np.array([xi, yi, 1.0])
     hs = np.arange(h_lo, h_hi + step / 2, step)
     X = ((d0 - hs) / (np.asarray(n) @ ray))[:, None] * ray[None, :]
     total = np.zeros(len(hs))
     count = np.zeros(len(hs))
     h_views, s_views = [], []
+    curves = []
+    leverage = []
     for img, O in zip(others, Os):
         P = (K @ (X - np.asarray(O)).T).T
         p = P[:, :2] / P[:, 2:3]
@@ -395,18 +429,33 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
         hv, sv, _ = _peak(hs, np.where(ok, s, np.nan))
         h_views.append(float(hv))
         s_views.append(float(sv))
+        curves.append(s)
+        leverage.append(float(np.linalg.norm(p[-1]-p[0])/max(hs[-1]-hs[0],step)))
     if len(h_views) < 2:
         return {"error": "точку видно меньше чем в 2 кадрах скана"}
     full = count == count.max()
     S = np.where(full, total / np.maximum(count, 1), np.nan)
     h, score, i = _peak(hs, S)
     edge = i in (0, len(hs) - 1)
+    rivals = S[(np.abs(hs-h) >= .8) & np.isfinite(S)]
+    margin = float(score-rivals.max()) if len(rivals) else float('inf')
+    hv, sv, leverage = map(np.asarray,(h_views,s_views,leverage))
+    good = sv > .5
+    if robust:
+        good &= (np.abs(hv-h) <= .35) & (leverage >= .6)
+    if robust and good.sum() >= 3 and not edge:
+        # Occluded/glinting views and views with little change per mm cannot set the height.
+        selected = np.asarray(curves)[good]
+        weights = leverage[good]*sv[good]
+        valid = np.isfinite(selected).all(axis=0) & (np.abs(hs-h) <= .35)
+        if np.count_nonzero(valid) >= 3:
+            refined = np.where(valid,np.average(selected,axis=0,weights=weights),np.nan)
+            h, score, _ = _peak(hs,refined)
     Xh = ((d0 - h) / (np.asarray(n) @ ray)) * ray
-    hv = np.array(h_views)
-    good = np.array(s_views) > 0.5
     sigma = float(np.std(hv[good], ddof=1) / np.sqrt(good.sum())) if good.sum() >= 3 else float("nan")
     return {"h": float(h), "score": float(score), "X": Xh, "h_views": h_views, "s_views": s_views,
-            "sigma": sigma, "at_range_edge": bool(edge), "views": int(count.max())}
+            "sigma": sigma, "at_range_edge": bool(edge), "views": int(count.max()),
+            "inlier_views": good.tolist(), "peak_margin":margin}
 
 
 # ---------- метки: триангуляция углов
@@ -443,16 +492,24 @@ def triangulate(pts, Os, K):
     return X, float(np.sqrt(np.mean(np.square(e))))
 
 
+def height_support(h_table, valid):
+    """Count measured neighbours at similar height within a 5×5 window, including the centre."""
+    z = np.pad(np.where(valid,h_table,np.nan),2,constant_values=np.nan)
+    hh,ww = h_table.shape
+    support = np.zeros_like(valid,dtype=np.uint8)
+    for dy in range(5):
+        for dx in range(5):
+            support += np.abs(z[dy:dy+hh,dx:dx+ww]-h_table) < .35
+    return support
+
+
 # ---------- объекты на столе
 def find_objects(h_table, valid, min_height=0.5, min_area_px=200, close_px=7, gap_px=4):
-    """Связные области выше min_height над столом (части ближе gap_px - один объект: верх и видимая сбоку стенка
-    разделены полосой без данных). Высоты - по достоверным пикселям после медианы 5x5 (одиночные выбросы)."""
-    filled = np.where(valid, h_table, -100).astype(np.float32)
-    hmed = cv2.medianBlur(filled, 5)
-    good = valid & (hmed > -50)
-    mask = ((hmed > min_height) & good).astype(np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    """Связные области с соседями на близкой высоте и статистикой поддержанного верхнего слоя."""
+    good = valid & (height_support(h_table,valid) >= 11)
+    mask = ((h_table > min_height) & good).astype(np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_px, close_px)))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3,3),np.uint8))
     grouped = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * gap_px + 1, 2 * gap_px + 1)))
     num, lab = cv2.connectedComponents(grouped, connectivity=8)
     objs = []
@@ -461,18 +518,28 @@ def find_objects(h_table, valid, min_height=0.5, min_area_px=200, close_px=7, ga
         area = int(region.sum())
         if area < min_area_px:
             continue
-        hs = hmed[region & good & (hmed > min_height)]
+        measured = region & good & (h_table > min_height)
+        hs = h_table[measured]
         if hs.size < 20:
             continue
         cnts, _ = cv2.findContours(region.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        top = float(np.percentile(hs, 98))
+        ordered = np.sort(hs)
+        # Upper surface needs a populated band, not just a few large values.
+        required = max(20,int(.07*len(ordered)))
+        occupied = np.searchsorted(ordered,ordered+.45,side='right')-np.arange(len(ordered))
+        bands = np.flatnonzero(occupied >= required)
+        if not len(bands):
+            continue
+        lower = ordered[bands[-1]]
+        top_mask = measured & (h_table >= lower) & (h_table <= lower+.45)
+        top = float(np.median(h_table[top_mask]))
         ys, xs = np.nonzero(region)
         objs.append({"area_px": area, "centroid_px": [float(xs.mean()), float(ys.mean())],
                      "bbox_px": [int(xs.min()), int(ys.min()), int(np.ptp(xs)) + 1, int(np.ptp(ys)) + 1],
                      "contour": max(cnts, key=cv2.contourArea),
                      "height_top": top, "height_median": float(np.median(hs)),
                      "height_max": float(hs.max()), "valid_px": int(hs.size),
-                     "top_px": np.argwhere(region & good & (hmed >= top - 0.2))[:, ::-1]})
+                     "top_px": np.argwhere(top_mask)[:, ::-1]})
     return sorted(objs, key=lambda o: -o["height_top"])
 
 

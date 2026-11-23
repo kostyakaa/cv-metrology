@@ -48,6 +48,17 @@ def set_focus(cap, focus, settle=0.3):
     time.sleep(settle)
 
 
+def autofocus_enabled(cap):
+    """Return True/False for a reported mode, or None if the backend did not report one."""
+    value = cap.get(cv2.CAP_PROP_AUTOFOCUS)
+    # DirectShow returns CameraControlFlags instead of the usual OpenCV 0/1.
+    if value in (2, 3) and cap.getBackendName() == "DSHOW":
+        return value == 3  # Manual = 2, Auto = 1 (including Auto | Manual).
+    if value in (0, 1):
+        return value == 1
+    return None
+
+
 def open_camera(index, width=None, height=None, fourcc=None, backend=None, verbose=True, saved_focus=True):
     """fourcc=None по умолчанию - НЕ трогаем формат, камера отдаёт тот поток,
     что выставлен по умолчанию драйвером (почти всегда сырой YUY2/NV12, этого

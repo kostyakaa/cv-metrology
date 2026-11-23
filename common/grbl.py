@@ -29,6 +29,7 @@ class Grbl:
         self.link = link
         self.log = log
         self.state = None
+        self.restarted = False
         self.mpos = self.wpos = self.wco = None
         self.banner = self._wait_banner(reset_wait)
         if not self.banner.startswith("Grbl 1.1"):
@@ -41,6 +42,10 @@ class Grbl:
         return raw.decode(errors="replace").strip() if raw else None
 
     def _handle_async(self, line):
+        if line.startswith("Grbl "):
+            self.restarted = True
+            self.mpos = self.wpos = self.wco = None
+            raise GrblError("GRBL перезапустился: привязка потеряна. Перезапустите скрипт и выполните c, k")
         if line.startswith("<"):
             self._parse_status(line)
         elif line.startswith("ALARM"):
@@ -80,6 +85,7 @@ class Grbl:
         raise GrblError(f"нет ответа на {line!r}")
 
     def _parse_status(self, line):
+        self.last_status_time = time.monotonic()
         fields = line.strip("<>").split("|")
         self.state = fields[0].split(":")[0]
         for f in fields[1:]:
@@ -112,6 +118,8 @@ class Grbl:
 
     # --- движение
     def require_idle(self):
+        if self.restarted:
+            raise GrblError("Потеряна привязка после перезапуска GRBL: заново запустите скрипт")
         state = self.status()
         if state != "Idle":
             raise GrblError(f"станок не в Idle, а в {state} (Alarm - разблокировка $X, Hold - продолжение ~)")
@@ -119,8 +127,17 @@ class Grbl:
     def jog(self, dx, dy, feed, tick=None):
         """Относительный ход XY и ожидание конца. tick() вызывается во время хода; True -> отмена."""
         self.require_idle()
-        self.cmd(f"$J=G21G91X{dx:.3f}Y{dy:.3f}F{feed:.0f}")
-        self.wait_idle(tick, timeout=60.0 * max(abs(dx), abs(dy)) / feed * 1.5 + 5.0)
+        if round(dx, 3) == 0 and round(dy, 3) == 0:
+            return
+        try:
+            self.cmd(f"$J=G21G91X{dx:.3f}Y{dy:.3f}F{feed:.0f}")
+            self.wait_idle(tick, timeout=60.0 * max(abs(dx), abs(dy)) / feed * 1.5 + 5.0)
+        except GrblAborted:
+            raise
+        except (Exception, KeyboardInterrupt):
+            # A lost frame or status reply must cancel the jog before caller cleanup or saving.
+            self.cancel()
+            raise
 
     def wait_idle(self, tick=None, timeout=60.0):
         deadline = time.time() + timeout
@@ -134,7 +151,6 @@ class Grbl:
             if state == "Alarm":
                 raise GrblError("ALARM во время хода - позиция могла сбиться")
             if time.time() > deadline:
-                self.cancel()
                 raise GrblError("ход не закончился вовремя - отменён")
             time.sleep(0.05)
 
@@ -145,6 +161,7 @@ class Grbl:
             if self.status() in ("Idle", "Alarm"):
                 return
             time.sleep(0.05)
+        raise GrblError("GRBL не подтвердил остановку jog")
 
     def settings(self, timeout=5.0):
         """Настройки GRBL ($$) -> {номер: значение}."""

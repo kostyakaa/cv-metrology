@@ -64,13 +64,10 @@ def outer_ids(lab, n, extra=None):
 
 # ---------- высоты и объект (оси опорного кадра, половинное разрешение)
 def table_heights(sc, speckle_mm2=1.0, speckle_diff=0.5):
-    """Высоты над столом там, где они есть (измерено или достроено плоскостью). Стол - плоскость меток, без неё -
-    стол в кадре. Одиночные ложные пятна (кусок, не стыкующийся по высоте с соседями, меньше speckle_mm2)
+    """Высоты над тем же столом, который выбрал ScanResult. Одиночные ложные пятна
+    (кусок, не стыкующийся по высоте с соседями, меньше speckle_mm2)
     выкидываются. Возвращает (высоты, известно, (n, d) стола, px на мм)."""
-    if sc.global_plane is not None:
-        nb, db = np.asarray(sc.global_plane[0], float), float(sc.global_plane[1])
-    else:
-        nb, db = np.asarray(sc.n_t, float), float(sc.d_t)
+    nb, db = np.asarray(sc.n_t, float), float(sc.d_t)
     px_mm = sc.Ks[0, 0] / db
     known = (sc.valid | sc.filled) & np.isfinite(sc.X[..., 0])
     h = np.where(known, db - sc.X @ nb, np.nan).astype(np.float32)
@@ -109,23 +106,33 @@ def select_object(h, known, px_mm, above=0.3, jump=1.0, adj_mm=1.0, tol=0.5, sup
     cy, cx = h.shape[0] / 2, h.shape[1] / 2
     x, y = stats[:, cv2.CC_STAT_LEFT], stats[:, cv2.CC_STAT_TOP]
     w, hh = stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]
-    cover = np.nonzero((x <= cx) & (cx < x + w) & (y <= cy) & (cy < y + hh) & (area > 0))[0]
+    half_width = np.zeros(n + 1, np.float32)
+    np.maximum.at(half_width, lab.ravel(), cv2.distanceTransform((lab > 0).astype(np.uint8), cv2.DIST_L2, 3).ravel())
+    areal = (area >= 4*px_mm**2) & (half_width >= min_half_width*px_mm)
+    candidates = areal if areal.any() else area > 0
+    cover = np.nonzero((x <= cx) & (cx < x + w) & (y <= cy) & (cy < y + hh) & candidates)[0]
     if len(cover):
         seed = cover[np.argmax(area[cover])]
     else:
-        ys, xs = np.nonzero(lab)
-        k = np.argmin((ys - cy) ** 2 + (xs - cx) ** 2)
-        seed = lab[ys[k], xs[k]]
+        distance = np.hypot(np.maximum(np.maximum(x-cx,cx-(x+w)),0),
+                            np.maximum(np.maximum(y-cy,cy-(y+hh)),0))
+        # The centre can be inside a U-shaped opening. A nearby sliver must not win
+        # against a well supported surface with a slightly more distant boundary.
+        seed = np.argmax(np.where(candidates,area/(1+distance/(8*px_mm))**2,0))
     kept = np.zeros(n + 1, bool)
     kept[seed] = True
-    half_width = np.zeros(n + 1, np.float32)  # полутолщина куска (радиус вписанного круга), px
-    np.maximum.at(half_width, lab.ravel(), cv2.distanceTransform((lab > 0).astype(np.uint8), cv2.DIST_L2, 3).ravel())
     ker = disk(adj_mm * px_mm)
+    surface_ker = disk(max(adj_mm,4.) * px_mm)
+    heights = np.zeros(n+1)
+    for i in np.flatnonzero(candidates):
+        heights[i] = np.median(h[lab == i])
     hz = np.nan_to_num(h, nan=0).astype(np.float32)
     for _ in range(100):
         km = kept[lab] & (lab > 0)
         near = cv2.dilate(km.astype(np.uint8), ker) > 0
         touch = np.bincount(lab[near & ~km], minlength=n + 1) > 0
+        surface = cv2.dilate(km.astype(np.uint8),surface_ker)>0
+        near_surface = np.bincount(lab[surface & ~km],minlength=n+1)>0
         inside = np.bincount(lab[fill_holes(km)], minlength=n + 1) / np.maximum(area, 1)
         top = cv2.dilate(np.where(km, hz, -1e9).astype(np.float32), ker)  # высота выбранного рядом
         contact = (lab > 0) & ~km & (top > -1e8)
@@ -134,6 +141,7 @@ def select_object(h, known, px_mm, above=0.3, jump=1.0, adj_mm=1.0, tol=0.5, sup
         wide = (area >= max(4.0 * px_mm ** 2, support_share * area[kept].sum())) & \
             (half_width >= min_half_width * px_mm)
         add = touch & ~kept & (((inside >= 0.5) & (lower <= 0.5)) | ((lower > 0.5) & wide))
+        add |= near_surface & candidates & ~kept & (np.abs(heights-heights[seed]) <= tol)
         add[0] = False
         if not add.any():
             break
@@ -200,7 +208,7 @@ def top_view(sc, h, full, interp, table, plane, res=0.25, above=0.3, min_part=0.
     zg = np.full(H * W, np.nan)
     zg[cells] = z[order[first]]
     sg = np.zeros(H * W, np.uint8)
-    np.maximum.at(sg, cell, src)
+    sg[cells] = src[order[first]]
     zg, sg = zg.reshape(H, W), sg.reshape(H, W)
     obs = np.isfinite(zg)
     # где виден стол (настоящие дыры и край объекта)
@@ -234,7 +242,9 @@ def top_view(sc, h, full, interp, table, plane, res=0.25, above=0.3, min_part=0.
     occ = np.isfinite(zg).astype(np.uint8)
     occ = cv2.morphologyEx(occ, cv2.MORPH_OPEN, disk(min_part / res))
     n, lab, stats, _ = cv2.connectedComponentsWithStats(occ, connectivity=8)
-    if n > 1:
+    if n == 1:
+        zg[:] = np.nan
+    else:
         area = stats[:, cv2.CC_STAT_AREA]
         keep = area >= max(4.0 / res ** 2, 0.01 * area[1:].max())
         keep[0] = False
@@ -303,6 +313,8 @@ def build_model(sc, res=0.25, above=0.3, min_part=0.75):
         return None
     full, hf, interp, table = fill_object(h, known, obj, above=above)
     top = top_view(sc, hf, full, interp, table, plane, res=res, above=above, min_part=min_part)
+    if not np.isfinite(top["z"]).any():
+        return None
     top["V"], top["F"] = grid_mesh(top["z"], top["x0"], top["y1"], res)
     return top
 
@@ -313,8 +325,8 @@ def describe(top, sc):
     occ = np.isfinite(z)
     rows, cols = np.nonzero(occ)
     share = [100 * ((src == k) & occ).sum() / occ.sum() for k in (2, 1, 0)]
-    base = "столом (плоскость меток)" if sc.global_plane is not None else "столом в кадре"
-    return [f"объект {np.ptp(cols) * res:.1f} x {np.ptp(rows) * res:.1f} мм, высота до {np.nanmax(z):.2f} мм над {base}",
+    return [f"объект {np.ptp(cols) * res:.1f} x {np.ptp(rows) * res:.1f} мм, высота до {np.nanmax(z):.2f} мм",
+            f"отсчёт высоты: {sc.ref_kind}",
             f"верх: измерено {share[0]:.0f}%, достроено плоскостью {share[1]:.0f}%, интерполировано {share[2]:.0f}%",
             f"начало координат: стол под камерой в опорной точке скана (станок X{sc.c_ref[0]:.3f} Y{sc.c_ref[1]:.3f}); "
             f"x - вправо по кадру, y - вверх по кадру, z - вверх от стола"]
