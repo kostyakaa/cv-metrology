@@ -1,8 +1,11 @@
 """Offline tests: no camera or serial connection is constructed."""
 import argparse
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import cv2
 import numpy as np
@@ -10,6 +13,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "z"))
 from measure_height import HeightTool, Abort, add_height_args
 from stereo import find_objects, plane_homography, plane_sweep
+from survey_markers import add_survey_args
 
 
 class PlanningTests(unittest.TestCase):
@@ -56,6 +60,39 @@ class PlanningTests(unittest.TestCase):
 
 
 class ReconstructionTests(unittest.TestCase):
+    def test_capture_only_saves_raw_frames_without_reconstruction(self):
+        tool = HeightTool.__new__(HeightTool)
+        tool.args = add_height_args(add_survey_args(argparse.ArgumentParser())).parse_args(["--capture-only"])
+        tool.require_grbl = Mock()
+        tool.A = np.eye(2)
+        tool.position = Mock(return_value=np.zeros(2))
+        tool.plan_scan = Mock(return_value=[np.zeros(2)])
+        tool.scan_plan = dict(actual_step_mm=12, min_pair_overlap=.5)
+        tool.confirm = Mock(return_value=True)
+        tool.backlash_comp = .2
+        tool.move = Mock()
+        tool.move_approach = Mock()
+        tool.capture = Mock(return_value=np.full((6, 8), 42.5, np.float32))
+        tool.last_capture = dict(received_s=[1.0])
+        tool.grbl = argparse.Namespace(reported_position=[0., 0., 42.], reported_frame="MPos")
+        tool.plane_guess = Mock(return_value=((np.array([0., 0., 1.]), 84., "test"), None))
+        tool.K = np.eye(3)
+        tool.D = np.zeros(5)
+        tool.V = np.eye(3)[:, :2]
+        tool.calib_name, tool.calib_model, tool.profile_id, tool.focus = "camera.json", "pinhole", "test", 185
+        tool.say = Mock()
+        tool.scan = object()
+        with tempfile.TemporaryDirectory() as folder, patch("measure_height.ScanResult") as reconstruct:
+            tool.scans_dir = Path(folder)
+            self.assertIsNone(tool.scan_here())
+            reconstruct.assert_not_called()
+            self.assertIsNone(tool.scan)
+            meta = json.loads((tool.scan_folder / "scan.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["captures"][0]["status_xyz"], [0., 0., 42.])
+            image = cv2.imread(str(tool.scan_folder / "frame_00.png"), cv2.IMREAD_UNCHANGED)
+            self.assertEqual(image.dtype, np.uint16)
+            self.assertEqual(image[0, 0], 10880)
+
     def test_supported_surface_ignores_isolated_high_spikes(self):
         h = np.full((45,81),np.nan,dtype=np.float32)
         h[7:36,7:70:3] = 10.0

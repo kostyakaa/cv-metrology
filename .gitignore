@@ -1,6 +1,14 @@
 __pycache__/
+/.venv/
+/.pytest_cache/
 .claude/
 .vscode/
 graphify-out
 .graphify-corpus
 ********.stl
+
+# Local measurements and offline replays
+/bench/
+/artifacts/
+/archived_scan.zip
+/cv-metrology-installation.zip

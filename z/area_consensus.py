@@ -67,6 +67,14 @@ def robust_consensus(layers, points, cameras, offsets, normal, distance, toleran
             good = valid & (supported[:,k] >= 3) & (supported[:,k] > contradicted[:,k])
             if not good.any():
                 continue
+            # Projecting a minority sample into derived maps can re-use the same source
+            # images. It cannot overrule conflicting measurements in the actual XY cell.
+            heights = z[:,unresolved[k]]
+            if valid.sum() > 1:
+                agreement = np.abs(heights[:,None] - heights[None,:]) <= tolerance
+                good &= 2 * agreement.sum(axis=1) > valid.sum()
+                if not good.any():
+                    continue
             hypotheses = z[good,unresolved[k]]
             if np.ptp(hypotheses) > tolerance:
                 continue

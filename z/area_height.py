@@ -3,6 +3,7 @@ import argparse
 import copy
 import json
 import tempfile
+import time
 import warnings
 from pathlib import Path
 
@@ -32,6 +33,7 @@ def reconstruct(frames, meta, args, out, first_scan=None, tick=None, datum_from=
     guess = meta["guess"]
     n = np.asarray(guess["n"])
     plane = meta.get("global_plane")
+    started = time.monotonic()
     pitch = args.cell_mm
     if not np.isfinite(pitch) or pitch <= 0 or not 2 <= args.references <= len(pos):
         raise ValueError("Проверьте --cell-mm и --references")
@@ -135,7 +137,7 @@ def reconstruct(frames, meta, args, out, first_scan=None, tick=None, datum_from=
                       single=(votes == 1) & ~confirmed, conflict=(votes >= 2) & ~confirmed,
                       confirmation_method=method, agreeing_views=support, rejected_observations=rejected)
     start = pos[first] + lo * pitch
-    result = dict(references=refs, cell_mm=pitch, xy_origin_command_mm=start.tolist(),
+    result = dict(seconds=time.monotonic()-started, references=refs, cell_mm=pitch, xy_origin_command_mm=start.tolist(),
                   ref_position=pos[first].tolist(), area_mm=roi, area_margin=margin,
                   table_reference=datum, normal=normal.tolist(), distance=float(distance),
                   view_selection=getattr(args,"view_selection","diverse"), map_views=args.map_views,

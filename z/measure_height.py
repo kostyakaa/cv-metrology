@@ -778,12 +778,17 @@ class HeightTool(Survey):
         meta.update(positions=np.asarray(shot_pos).tolist(), ref_index=ref_index)
         # Preserve raw captures before any experimental image processing.
         save_scan(folder, frames, shot_pos, ref_index, meta)
+        self.say(f"кадры скана сохранены: {folder}")
+        if self.args.capture_only:
+            self.scan = None
+            self.sel = None
+            self.scan_folder = folder
+            return
         stereo_xy = stereo_positions(frames, meta, self.args)
         if "pose_fit" in meta:
             tmp = folder / "scan.tmp.json"
             tmp.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
             tmp.replace(folder / "scan.json")
-        self.say(f"кадры скана сохранены: {folder}")
         self.say("считаю карту высот... (ESC - отмена)")
         try:
             self.scan = ScanResult(frames, stereo_xy, ref_index, self.K, self.D, self.calib_model, self.V, guess,
@@ -944,6 +949,7 @@ def add_height_args(ap):
     ap.add_argument("--click-range", type=float, default=1.0, help="клик: +-мм вокруг высоты по карте")
     ap.add_argument("--max-sigma", type=float, default=0.05,
                     help="клик: допустимая погрешность (СКО среднего по кадрам), мм")
+    ap.add_argument("--capture-only", action="store_true", help="b: сохранить кадры и координаты без расчёта карты")
     ap.add_argument("--analysis-out", type=Path, help="Сохранить пересчёт --from-scan в новом каталоге без GUI")
     ap.add_argument("--from-scan", type=str, default=None, help="разобрать сохранённый скан (без камеры и станка)")
     return ap

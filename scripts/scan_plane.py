@@ -415,8 +415,8 @@ class PlaneScanner(HeightTool):
 
     def scan_heights(self):
         """Use the existing multi-view scan around the camera's current position."""
-        self.scan_here()
-        if self.map is None:
+        scan = self.scan_here()
+        if scan is not None and self.map is None:
             self.map = MapWindow('Локальная карта высот')
             self.show_map()
 

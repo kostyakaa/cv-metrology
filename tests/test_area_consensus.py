@@ -23,6 +23,11 @@ class AreaConsensusTests(unittest.TestCase):
         self.assertEqual((method,votes,rejected),(2,3,1))
         self.assertAlmostEqual(height,10.04)
 
+    def test_projected_minority_cannot_override_archive_cell(self):
+        heights = [1.1217, 1.2883, -5.5733, -12.3492, 1.5208]
+        _, method, _, _ = self.solve(heights, [-12.34, -12.36, np.nan, -12.3492, np.nan])
+        self.assertEqual(method, 0)
+
     def test_equal_or_overlapping_groups_remain_conflicting(self):
         for values in ([10,10.1,14,14.1],[10,10.2,10.25,10.45]):
             self.assertEqual(self.solve(values,[np.nan]*4)[1],0)
