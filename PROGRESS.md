@@ -37,20 +37,19 @@
 
 Ранние итерации и расширенный эксперимент сохранены отдельно. На расширенной карте подтверждены 2 639 из 3 967 ячеек верха (66,5%), 15 из 1 365 ячеек прорези и 4 из 812 ячеек контрольного окна стола. P95 ошибки верха 0,332 мм. У прежнего режима восьми ближайших ракурсов подтверждены 1 386 ячеек верха с p95 0,282 мм. Расширенный режим остаётся экспериментальным. Достроенных точек в нём нет. Эту карту нельзя использовать для сертификации ширины ножек или глубины всей прорези.
 
-Исходные данные о повороте находятся в [axes.json](artifacts/archive_geometry_20261124/axes.json), результат одного фактора — в [ab/comparison.json](artifacts/archive_geometry_20261124/ab/comparison.json), протокол тестов — в [tests.txt](artifacts/archive_geometry_20261124/tests.txt). Расширенная [карта](artifacts/archive_geometry_20261124/final/area.npz), [3D-вид](artifacts/archive_geometry_20261124/final/height_3d.png) и [сравнение на общих ячейках](artifacts/archive_geometry_20261124/evaluation/paired.json) относятся к ранее проведённой серии.
+Файлы A/B создаются командами ниже. Для расширенного варианта запустите сценарий replay_archive_geometry.ps1, указанный в README. Он создаст axes.json, final/area.npz, final/height_3d.png и comparison/metrics.json.
 
 Для продолжения сначала проверить смещение левой ножки по независимому эталону и устойчивость нуля по нескольким участкам стола. Затем оценить покрытие дна на отдельно размеченной видимой площадке. До этой проверки старый рабочий режим сохраняется. Карты эксперимента совместимы с `z/view_height_map.py`.
 
-## Повторить один A/B в PowerShell из корня репозитория
+## Повторить A/B в PowerShell из корня репозитория
 
 ```powershell
 $scan = 'scans/scan_20261123-171208'
-$r = 'artifacts/archive_geometry_20261124'
-$datum = "$r/baseline/area.json"
-python z/network_height.py $scan --datum-from $datum --out artifacts/repeat_before
-python z/network_height.py $scan --datum-from $datum --axes "$r/axes.json" --out artifacts/repeat_after
-python z/compare_height_engines.py $scan --masks artifacts/u_part_surfaces_20261123/final/surfaces.npz --maps artifacts/repeat_before artifacts/repeat_after --out artifacts/repeat_comparison
-python -m unittest discover -s tests -v
+$r = 'bench/ab-u-01'
+.\scripts\run_metrology.ps1 -Stage Analyze -RunDir $r -Scan $scan -AreaX 68 -AreaY 47 -Margin 7 -Below 18
+python z/compare_height_engines.py $scan --masks artifacts/u_part_surfaces_20261123/final/surfaces.npz --maps "$r/stereo-original" "$r/stereo-corrected" --out "$r/comparison"
 ```
 
-Для независимого воспроизведения поворота используется `python z/fit_stereo_axes.py $scan --datum-from $datum --out artifacts/repeat_axes.json`. Все выходные пути для нового запуска должны быть свободны.
+Выберите новый каталог `$r`. Вторая команда требует `accepted: true` в `axes.json`. Сравнение использует те же контуры контрольных областей П-детали. `metrics.json` показывает покрытие и ошибку на каждой карте, `paired.json` использует только общие подтверждённые ячейки.
+
+Повтор на коммите edded00 с OpenCV 5.0.0 дал 1 907 → 2 418 подтверждённых ячеек из 20 295 при добавлении поправки. На 1 568 общих ячейках верха p95 ошибки к интервалу 9,85–10,00 мм снизился с 0,344 до 0,296 мм. На правой ножке общих ячеек 13, p95 вырос с 0,308 до 0,472 мм. В окне прорези всего 10 → 12 подтверждённых ячеек из 1 365. Эти числа относятся к повтору с одним общим нулём стола. Исторический прогон выше дал близкие, но немного отличающиеся значения.

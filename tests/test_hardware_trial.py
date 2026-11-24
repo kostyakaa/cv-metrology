@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'scripts'))
 from scan_plane import Abort, PlaneScanner, add_height_args, add_survey_args, apply_calibration_focus
 from common.grbl import Grbl, GrblAborted, GrblError, JOG_CANCEL
+from survey_markers import CenteringNotConverged
 from common.markers import get_dictionary
 
 
@@ -111,7 +112,7 @@ class HardwareTrialTests(unittest.TestCase):
             self.assertIn(JOG_CANCEL, stage.commands)
             self.assertFalse(stage.stops)
 
-    def run_trial(self, wrong_direction=False):
+    def run_trial(self, wrong_direction=False, closure_failed=False):
         parser = argparse.ArgumentParser()
         add_survey_args(parser)
         add_height_args(parser)
@@ -123,6 +124,8 @@ class HardwareTrialTests(unittest.TestCase):
         K = [[400.,0.,239.5],[0.,400.,179.5],[0.,0.,1.]]
         settings = {'3':1.,'100':800.,'101':800.}
         layout = {'0':[0,0],'1':[100,0],'2':[100,70],'3':[0,70]}
+        if closure_failed:
+            layout = {'0':[0,0],'1':[6,0],'2':[6,6],'3':[0,6]}
         calib = dict(camera_matrix=K,dist_coeffs=[0]*5,model='pinhole',
                      mode=dict(grbl_settings=settings,focus=185),
                      machine_check=dict(motion=dict(V_cam=V)))
@@ -160,6 +163,22 @@ class HardwareTrialTests(unittest.TestCase):
                 self.assertEqual(len(m['records']),2)
                 self.assertAlmostEqual(np.linalg.norm(stage.xy),6,places=1)
                 return
+            if closure_failed:
+                args.trial = False
+                args.feed = 120
+                with patch.object(tool, 'center_on', side_effect=CenteringNotConverged('0.059 > 0.05')):
+                    tool.scan_plane()
+                self.assertEqual(tool.mosaic_folder.name, 'fused')
+                self.assertTrue(tool.mosaic_meta['capture_complete'])
+                self.assertFalse(tool.mosaic_meta['complete'])
+                self.assertFalse(tool.mosaic_meta['navigation_quality']['usable'])
+                self.assertIn('0.059', tool.mosaic_meta['stop_reason'])
+                self.assertGreaterEqual(len(tool.mosaic_meta['records']), 4)
+                tool.show_mosaic.assert_called_once()
+                with patch('scan_plane.view') as display:
+                    PlaneScanner.show_mosaic(tool)
+                display.assert_called_once_with(tool.mosaic_folder, None)
+                return
             tool.scan_plane()
             folder = tool.mosaic_folder
             self.assertEqual(folder.name,'fused')
@@ -179,3 +198,6 @@ class HardwareTrialTests(unittest.TestCase):
 
     def test_wrong_direction_stops_at_first_corner_without_return(self):
         self.run_trial(wrong_direction=True)
+
+    def test_full_scan_rebuilds_for_viewing_when_final_centering_does_not_converge(self):
+        self.run_trial(closure_failed=True)

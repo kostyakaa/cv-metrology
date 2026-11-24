@@ -46,6 +46,8 @@ def main():
                          "model - достроенная 2.5D-модель: верх целиком, стенки до стола (STL - z/make_model.py)")
 
     args_cli = ap.parse_args()
+    if not (Path(args_cli.scan_dir) / 'scan.json').is_file():
+        ap.error('Укажите папку скана, содержащую scan.json и кадры frame_*.png.')
     if (args_cli.downsample < 1 or args_cli.sor_k < 0 or args_cli.sor_k == 1
             or not np.isfinite(args_cli.sor_scale) or args_cli.sor_scale <= 0):
         ap.error("--downsample >= 1, --sor-k = 0 или >= 2, --sor-scale > 0")

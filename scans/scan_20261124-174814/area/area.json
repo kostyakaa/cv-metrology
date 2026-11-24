@@ -1,0 +1,39 @@
+{
+  "seconds": 34.6045706999721,
+  "references": [
+    12,
+    24,
+    4,
+    0,
+    20
+  ],
+  "cell_mm": 0.5,
+  "xy_origin_command_mm": [
+    93.60499999999999,
+    -25.515
+  ],
+  "ref_position": [
+    134.605,
+    4.985
+  ],
+  "area_mm": [
+    68.0,
+    47.0
+  ],
+  "area_margin": 7.0,
+  "table_reference": "стол в кадре (6% кадра)",
+  "normal": [
+    -0.002032255223690382,
+    -0.0049502964189422,
+    0.9999856821495349
+  ],
+  "distance": 84.05653590660617,
+  "view_selection": "diverse",
+  "map_views": 0,
+  "agreement_mm": 0.35,
+  "cells": 20295,
+  "observed": 11770,
+  "confirmed": 3180,
+  "conflicting": 3154,
+  "requested_perimeter_band_coverage": 0.18043478260869567
+}

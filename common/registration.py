@@ -47,20 +47,32 @@ def adjust(positions, edges, anchors, grbl_prior=True):
     return offset
 
 
+def optical_step(edge, tags, records):
+    """Optical evidence only. A GRBL residual alone cannot break an optical track."""
+    i, j = edge['i'], edge['j']
+    ids = tags[i].keys() & tags[j].keys()
+    if ids:
+        return np.median([tags[i][k]-tags[j][k] for k in ids], axis=0), 'common marker'
+    if edge.get('reason') == 'endpoint and motion disagree':
+        return None, None
+    if 'delta_mm' in edge:
+        return edge['delta_mm'], edge['source']
+    if edge.get('tile'):
+        return edge['tile']['delta_mm'], 'endpoints'
+    flow = records[j].get('motion_from_previous') or {}
+    if j == i+1 and flow.get('valid') and flow.get('timing_consistent', True):
+        return flow['delta_mm'], 'motion'
+    return None, None
+
+
 def optical_coordinates(tags, measured, records):
     """Rejoin interrupted optical tracks across rows without machine displacements or marker layout."""
     graph = []
     adjacent = [set() for _ in tags]
     for e in measured:
         i,j = e['i'],e['j']
-        ids = tags[i].keys() & tags[j].keys()
-        if ids:
-            step = np.median([tags[i][k]-tags[j][k] for k in ids],axis=0)
-        elif e.get('tile'):
-            step = e['tile']['delta_mm']
-        elif j == i+1 and records[j].get('motion_from_previous',{}).get('valid'):
-            step = records[j]['motion_from_previous']['delta_mm']
-        else:
+        step, _ = optical_step(e, tags, records)
+        if step is None:
             continue
         graph.append(dict(i=i,j=j,delta_mm=step,scatter_mm=.10))
         adjacent[i].add(j)
@@ -302,8 +314,16 @@ def register(folder, meta, K, D, model):
     zero = np.zeros_like(positions)
     checks = dict(edges_grbl=edge_errors(zero), edges_fused=edge_errors(cv_offset,cv_scale),
                   markers_grbl=tag_errors(zero), markers_fused=tag_errors(cv_offset,cv_scale))
-    scale = ProjectionScale(meta['polygon'], positions, edges, anchors)
-    offsets = adjust(positions, scale.project_edges(edges, positions), anchors)
+    base_score, fused_score = checks['edges_grbl'], checks['edges_fused']
+    # Stop-to-stop geometry is required for detail alignment even if marker residuals improve.
+    rejected = (base_score is not None and base_score['count'] >= 5
+                and fused_score['p95_mm'] > max(base_score['p95_mm'] * 1.15, base_score['p95_mm'] + .03))
+    if rejected:
+        scale = ProjectionScale(meta['polygon'], positions, [], [])
+        offsets = zero
+    else:
+        scale = ProjectionScale(meta['polygon'], positions, edges, anchors)
+        offsets = adjust(positions, scale.project_edges(edges, positions), anchors)
     # Keep a camera-only trajectory in segment-local coordinates. Never fill lost motion with GRBL.
     consecutive = {e['j']: e for e in measured if e['j'] == e['i']+1}
     trajectory, segment, xy = [], 0, np.zeros(2)
@@ -314,16 +334,9 @@ def register(folder, meta, K, D, model):
         source = None
         if j:
             e = consecutive[j]
-            if 'delta_mm' in e:
-                xy += e['delta_mm']
-                source = e['source']
-            elif tags[j-1].keys() & tags[j].keys():
-                ids = tags[j-1].keys() & tags[j].keys()
-                xy += np.median([tags[j-1][m]-tags[j][m] for m in ids],axis=0)
-                source = 'common marker'
-            elif records[j].get('motion_from_previous', {}).get('valid'):
-                xy += records[j]['motion_from_previous']['delta_mm']
-                source = 'motion'
+            step, source = optical_step(e, tags, records)
+            if step is not None:
+                xy += step
             else:
                 segment += 1
                 xy = np.zeros(2)
@@ -332,5 +345,6 @@ def register(folder, meta, K, D, model):
                          marker_observations=marker_observations,
                          scale_grid=dict(origin=scale.origin.tolist(), spacing=scale.spacing, values=scale.field.tolist()),
                          optical_trajectory=trajectory, optical_positions=optical_coordinates(tags,measured,records),
-                         validation=checks)
+                         validation=checks, correction_applied=not rejected,
+                         correction_reason='held-out pair p95 worsened' if rejected else None)
 

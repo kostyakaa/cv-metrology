@@ -11,10 +11,10 @@ param(
     [ValidateRange(1,8192)][int]$Width = 1920,
     [ValidateRange(1,8192)][int]$Height = 1080,
     [Nullable[double]]$HeadZmm,
-    [ValidateRange(1,400)][int]$AreaX = 68,
-    [ValidateRange(1,400)][int]$AreaY = 47,
-    [ValidateRange(0,50)][int]$Margin = 7,
-    [ValidateRange(0,100)][int]$Below = 18,
+    [ValidateRange(1,400)][double]$AreaX = 68,
+    [ValidateRange(1,400)][double]$AreaY = 47,
+    [ValidateRange(0,50)][double]$Margin = 7,
+    [ValidateRange(0,100)][double]$Below = 18,
     [string]$Scan
 )
 
@@ -44,7 +44,7 @@ try {
         $before = Join-Path $dir 'stereo-original'
         $after = Join-Path $dir 'stereo-corrected'
         $axes = Join-Path $dir 'axes.json'
-        $areaArgs = @('--area-mm',$AreaX,$AreaY,'--area-margin',$Margin,'--below',$Below,'--cell-mm','0.5')
+        $areaArgs = @('--area-mm',(Decimal-Argument $AreaX),(Decimal-Argument $AreaY),'--area-margin',(Decimal-Argument $Margin),'--below',(Decimal-Argument $Below),'--cell-mm','0.5')
         Invoke-Step z/area_height.py $scanPath @areaArgs --references 5 --fusion range --no-pose-refinement --no-fill --out $base
         Invoke-Step z/network_height.py $scanPath @areaArgs --datum-from $datum --out $before
         Invoke-Step z/render_metric_height.py $before
@@ -89,7 +89,7 @@ try {
     }
     if ($Stage -eq 'Capture') {
         Write-Output 'At a visible ID0-3 marker use c, k. Jog to the part center, then b. Record the scan path, then q.'
-        Invoke-Step scripts/scan_plane.py @cameraArgs --capture-only --grid 5 --baseline 16 --area-mm $AreaX $AreaY --area-margin $Margin --below $Below --feed 120 --slow-feed 120
+        Invoke-Step scripts/scan_plane.py @cameraArgs --capture-only --grid 5 --baseline 16 --area-mm (Decimal-Argument $AreaX) (Decimal-Argument $AreaY) --area-margin (Decimal-Argument $Margin) --below (Decimal-Argument $Below) --feed 120 --slow-feed 120
     }
 } finally {
     Pop-Location

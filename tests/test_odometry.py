@@ -76,6 +76,14 @@ class OpticalMotionTests(unittest.TestCase):
         self.assertEqual([c['origin_frame'] for c in coords], [0,0,0,3])
         np.testing.assert_allclose([c['xy_mm'] for c in coords],[[0,0],[7,1],[9,7],[0,0]],atol=1e-8)
 
+    def test_conflicting_and_mistimed_motion_do_not_join_optical_tracks(self):
+        pairs = [dict(i=0, j=1), dict(i=1, j=2, tile=dict(delta_mm=[15, 0]),
+                                       reason='endpoint and motion disagree')]
+        records = [{}, dict(motion_from_previous=dict(valid=True, timing_consistent=False, delta_mm=[20,0])),
+                   dict(motion_from_previous=dict(valid=True, timing_consistent=True, delta_mm=[17,0]))]
+        coords = optical_coordinates([{}, {}, {}], pairs, records)
+        self.assertEqual([c['origin_frame'] for c in coords], [0, 1, 2])
+
     def test_offline_blank_scan_preserves_pixels_and_reports_gap(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)

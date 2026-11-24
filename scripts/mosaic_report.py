@@ -42,6 +42,8 @@ def main():
             if settled: print(f'Max marker discrepancy: {max(settled):.3f} mm')
         reg=m.get('registration')
         if reg:
+            if reg.get('correction_applied') is False:
+                print('XY: GRBL kept after validation. Lighting is blended. Reason:', reg['correction_reason'])
             pairs=reg['pairs']
             path=reg['optical_trajectory']
             good_steps=sum(a['segment']==b['segment'] for a,b in zip(path,path[1:]))

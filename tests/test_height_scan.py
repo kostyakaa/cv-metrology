@@ -60,6 +60,23 @@ class PlanningTests(unittest.TestCase):
 
 
 class ReconstructionTests(unittest.TestCase):
+    def test_marker_depth_counts_only_views_supporting_selected_height(self):
+        from stereo import refine_point
+
+        k = np.array([[80., 0, 50], [0, 80., 50], [0, 0, 1.]])
+        image = np.random.default_rng(1).integers(0, 256, (100, 100), dtype=np.uint8)
+        heights = np.arange(-2., 2.01, .1)
+        peak = np.exp(-(heights ** 2))
+        rival = np.exp(-((heights - 1.5) ** 2))
+        clipped = np.where(heights >= -0.01, peak, np.nan)
+        for curves, edge, support in (([peak, peak, peak, rival], False, 3),
+                                      ([clipped] * 4, True, 4)):
+            with patch('stereo._sample', side_effect=curves):
+                result = refine_point(image, [image] * 4, [[2, 0, 0]] * 4, k, [0, 0, 1],
+                                      80., [50, 50], -2., 2., step=.1, inspect_secondary_peak=True)
+            self.assertEqual(result['at_range_edge'], edge)
+            self.assertEqual(sum(result['inlier_views']), support)
+
     def test_capture_only_saves_raw_frames_without_reconstruction(self):
         tool = HeightTool.__new__(HeightTool)
         tool.args = add_height_args(add_survey_args(argparse.ArgumentParser())).parse_args(["--capture-only"])
@@ -92,6 +109,18 @@ class ReconstructionTests(unittest.TestCase):
             image = cv2.imread(str(tool.scan_folder / "frame_00.png"), cv2.IMREAD_UNCHANGED)
             self.assertEqual(image.dtype, np.uint16)
             self.assertEqual(image[0, 0], 10880)
+
+    def test_marker_profile_distinguishes_a_shoulder_from_a_second_height(self):
+        from stereo import secondary_peak_margin
+
+        heights = np.linspace(-4, 4, 801)
+        smooth_peak = .90 - .06875 * heights**2
+        best_index = int(smooth_peak.argmax())
+        shoulder = smooth_peak[best_index] - max(smooth_peak[np.abs(heights) >= .8])
+        self.assertAlmostEqual(shoulder, .044, delta=.002)
+        self.assertIsNone(secondary_peak_margin(heights, smooth_peak, best_index))
+        two_peaks = np.maximum(smooth_peak, .875 - (heights - 1.6)**2)
+        self.assertAlmostEqual(secondary_peak_margin(heights, two_peaks, best_index), .025)
 
     def test_supported_surface_ignores_isolated_high_spikes(self):
         h = np.full((45,81),np.nan,dtype=np.float32)

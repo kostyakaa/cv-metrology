@@ -1,6 +1,7 @@
 opencv-python>=4.8
 numpy>=1.24
 Pillow>=10
+textual>=8.2,<9
 pyserial>=3.5
 pygrabber>=0.2; sys_platform == 'win32'
 

@@ -382,8 +382,26 @@ def _peak(hs, s):
     return hs[i], s[i], i
 
 
+def secondary_peak_margin(heights, scores, best_index, separation=.8):
+    """Compare separate maxima, including open-ended hypotheses at the search limits."""
+    from scipy.signal import find_peaks
+
+    valid = np.isfinite(scores)
+    curve = np.where(valid, scores, -np.inf)
+    peaks, _ = find_peaks(curve, prominence=.005)
+    # An increasing score at the end of a finite run may peak outside the search or visibility range.
+    left = np.r_[-np.inf, curve[:-1]]
+    right = np.r_[curve[1:], -np.inf]
+    boundary_maxima = valid & ((~np.isfinite(left) & (curve >= right))
+                              | (~np.isfinite(right) & (curve >= left)))
+    candidates = np.union1d(peaks, np.flatnonzero(boundary_maxima))
+    candidates = candidates[np.abs(heights[candidates] - heights[best_index]) >= separation]
+    return float(scores[best_index] - scores[candidates].max()) if candidates.size else None
+
+
 def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, min_std=3.0,
-                 ref_valid=None, robust=False, texture_ratio=.045, others_valid=None):
+                 ref_valid=None, robust=False, texture_ratio=.045, others_valid=None,
+                 inspect_secondary_peak=False):
     """Высота точки x (пиксель опорного кадра) над плоскостью n·X = d0: шаблон вокруг x ищется в каждом кадре
     вдоль её эпиполярной линии (только высоты h_lo..h_hi), корреляции всех кадров складываются по высоте.
     Возвращает dict: h, score, X (3D), h_views (по каждому кадру отдельно), sigma; либо {'error': ...}."""
@@ -449,26 +467,42 @@ def refine_point(ref, others, Os, K, n, d0, x, h_lo, h_hi, patch=31, step=0.01, 
 
     S = np.where(full, total / np.maximum(count, 1), np.nan)
     h, score, i = _peak(hs, S)
-    edge = i in (0, len(hs) - 1)
-    rivals = S[(np.abs(hs-h) >= .8) & np.isfinite(S)]
-    margin = float(score-rivals.max()) if len(rivals) else 0.0
+    # A visibility mask can truncate the searchable interval inside the nominal height range.
+    def visibility_edge(index):
+        return index in (0, len(hs) - 1) or not (full[index - 1] and full[index + 1])
+
     hv, sv, leverage = map(np.asarray,(h_views,s_views,leverage))
-    good = sv > .5
-    if robust:
-        good &= (np.abs(hv-h) <= .35) & (leverage >= .6)
-    if robust and good.sum() >= 3 and not edge:
+    curves = np.asarray(curves)
+    def supporting_views(index, height):
+        # A high score elsewhere in a view is not support for this 3D point.
+        good = curves[:, index] > .5
+        if inspect_secondary_peak or robust:
+            good &= np.abs(hv-height) <= .35
+        if robust:
+            good &= leverage >= .6
+        return good
+
+    good = supporting_views(i, h)
+    if robust and good.sum() >= 3 and not visibility_edge(i):
         # Occluded/glinting views and views with little change per mm cannot set the height.
-        selected = np.asarray(curves)[good]
+        selected = curves[good]
         weights = leverage[good]*sv[good]
-        valid = np.isfinite(selected).all(axis=0) & (np.abs(hs-h) <= .35)
+        valid = full & np.isfinite(selected).all(axis=0) & (np.abs(hs-h) <= .35)
         if np.count_nonzero(valid) >= 3:
             refined = np.where(valid,np.average(selected,axis=0,weights=weights),np.nan)
-            h, score, _ = _peak(hs,refined)
+            h, score, i = _peak(hs,refined)
+            good = supporting_views(i, h)
+    edge = visibility_edge(i)
+    rivals = S[(np.abs(hs-h) >= .8) & np.isfinite(S)]
+    # Compare like-for-like on the full range, including after local weighted refinement.
+    margin = float(S[i]-rivals.max()) if len(rivals) else 0.0
+    secondary_margin = secondary_peak_margin(hs, S, i) if inspect_secondary_peak else None
     Xh = ((d0 - h) / (np.asarray(n) @ ray)) * ray
     sigma = float(np.std(hv[good], ddof=1) / np.sqrt(good.sum())) if good.sum() >= 3 else float("nan")
     return {"h": float(h), "score": float(score), "X": Xh, "h_views": h_views, "s_views": s_views,
             "sigma": sigma, "at_range_edge": bool(edge), "views": int(count[i]),
-            "inlier_views": good.tolist(), "peak_margin":margin}
+            "inlier_views": good.tolist(), "peak_margin": margin,
+            "secondary_peak_margin": secondary_margin}
 
 
 # ---------- метки: триангуляция углов

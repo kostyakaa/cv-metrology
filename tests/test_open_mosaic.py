@@ -162,6 +162,96 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in tool.jog_key.call_args_list],list(map(ord,'wasd')))
         self.assertEqual(tool.jog_step,.1)
 
+    def test_auto_keeps_confirmation_for_navigation_and_stops_after_bad_closure(self):
+        settings = {3: 1, 100: 800, 101: 800}
+        for yes, closure_ok in ((False, True), (True, True), (True, False)):
+            with self.subTest(yes=yes, closure_ok=closure_ok):
+                args = Mock(confirm=True, yes=yes)
+                tool = bare_tool(args=args, grbl=Mock(), calib_settings=settings, layout_settings=settings,
+                                 V=np.eye(3)[:, :2], V_calib=np.eye(3)[:, :2])
+                tool.layout = {0: [0., 0.], 1: [20., 0.], 2: [20., 10.], 3: [0., 10.]}
+                tool.grbl.settings.return_value = settings
+                tool.require_grbl = Mock()
+                tool.require_marker = Mock(return_value={'id': 0})
+                tool.confirm = Mock(return_value=True)
+                stages = []
+
+                def stage(key):
+                    stages.append(key)
+                    self.assertFalse(args.confirm)
+                    if key == 'r' and not closure_ok:
+                        raise Abort('Замыкание 0.600 мм')
+
+                tool.calibrate_axes = Mock(side_effect=lambda: stage('k'))
+                tool.run_survey = Mock(side_effect=lambda **kwargs: stage('r'))
+                tool.measure_table_plane = Mock(side_effect=lambda **kwargs: stage('t'))
+                tool.scan_plane = Mock(side_effect=lambda **kwargs: stage('p'))
+                tool.show_mosaic = Mock(side_effect=lambda: self.assertTrue(args.confirm))
+                if closure_ok:
+                    tool.run_auto()
+                    self.assertEqual(stages, list('krtp'))
+                    tool.run_survey.assert_called_once_with(max_closure=.5)
+                    tool.measure_table_plane.assert_called_once_with(max_closure=.5)
+                    tool.scan_plane.assert_called_once_with(open_view=False)
+                    tool.show_mosaic.assert_called_once()
+                else:
+                    with self.assertRaisesRegex(Abort, 'Замыкание'):
+                        tool.run_auto()
+                    self.assertEqual(stages, list('kr'))
+                    tool.show_mosaic.assert_not_called()
+                self.assertEqual(tool.confirm.call_count, int(not yes))
+                self.assertTrue(args.confirm)
+
+    def test_auto_requires_saved_layout_before_any_axis_motion(self):
+        tool = bare_tool(args=Mock(yes=True), grbl=Mock())
+        tool.require_grbl = Mock()
+        tool.calibrate_axes = Mock()
+        with self.assertRaisesRegex(Abort, 'сохранённые четыре метки'):
+            tool.run_auto()
+        tool.calibrate_axes.assert_not_called()
+
+    def test_bad_closure_rolls_back_session_markers(self):
+        old = {0: np.array([0., 0.]), 1: np.array([20., 0.]), 2: np.array([20., 12.]), 3: np.array([0., 12.])}
+        tool = bare_tool(A=np.eye(2), markers=old.copy(), closure=np.array([.01, 0.]), depth_pass=False)
+        tool.require_grbl = tool.say = tool.save_frame = Mock()
+        tool.expected = lambda: tool.markers.copy()
+        tool.center_on = lambda: (0, np.array([.1, 0.]))
+        tool.travel_to = lambda mid: (mid, old[mid] + (1. if mid == 0 else .1))
+        with self.assertRaisesRegex(Abort, 'Замыкание'):
+            tool.run_survey(max_closure=.5)
+        for mid in old:
+            np.testing.assert_array_equal(tool.markers[mid], old[mid])
+        np.testing.assert_array_equal(tool.closure, [.01, 0])
+        self.assertIsNone(tool.last_centered)
+
+    def test_center_requires_visible_marker_before_backlash_move(self):
+        tool = bare_tool(A=np.eye(2), last_dir=np.zeros(2))
+        tool.require_grbl = Mock()
+        tool.require_marker = Mock(side_effect=Abort('no marker'))
+        tool.move_approach = Mock()
+        with self.assertRaisesRegex(Abort, 'no marker'):
+            tool.center_on(0)
+        tool.move_approach.assert_not_called()
+
+    def test_shifted_corner_stops_before_record_or_final_servo(self):
+        tool = bare_tool(A=np.eye(2)*13, target=np.zeros(2), size=(1920,1080))
+        target = np.array([295., 0.])
+        approach = np.array([283., 0.])
+        tool.position = Mock(side_effect=[np.zeros(2), approach])
+        tool.require_grbl = Mock()
+        tool.travel_to_point = Mock()
+        tool.expected = lambda: {3: target}
+        tool.measure = lambda mid: {'center': np.array([-1.7*13, 0.])}
+        tool.center_on = Mock()
+        with self.assertRaisesRegex(Abort, 'ID3'):
+            tool.travel_to(3)
+        np.testing.assert_allclose(tool.travel_to_point.call_args.args[0], approach)
+        tool.center_on.assert_not_called()
+        tool.markers = {3: target.copy()}
+        with self.assertRaisesRegex(Abort, 'ID3'):
+            tool.record(3, approach + [1.7, 0.])
+        np.testing.assert_array_equal(tool.markers[3], target)
+
     def test_trial_mosaic_reopened_for_inspection(self):
         tool = bare_tool(mosaic_folder=Path('trial'), mosaic_meta={'trial':True},args=Mock(trial=False))
         with patch('scan_plane.view') as display:

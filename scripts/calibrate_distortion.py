@@ -504,12 +504,16 @@ def main():
     ap.add_argument("--calib", type=str, default=None, help="файл калибровки (куда сохранить / что загрузить)")
     ap.add_argument("--from-dir", type=str, default=None, help="посчитать по сохранённым кадрам вместо съёмки")
     ap.add_argument("--undistort-only", action="store_true", help="не калибровать, только live undistort по --calib")
+    ap.add_argument("--square-mm", type=float,
+                    help="Измеренный средний шаг клетки печатной доски, мм")
     ap.add_argument("--board-above-table", type=float, help="Измеренная высота рисунка лежащей доски над столом, мм")
     ap.add_argument("--pixel-size-um", type=float, default=None, help="размер пикселя сенсора, мкм (для f в мм)")
     args = ap.parse_args()
 
     model = "fisheye" if args.fisheye else ("pinhole_rational" if args.rational else "pinhole")
 
+    if args.square_mm is not None and (not np.isfinite(args.square_mm) or args.square_mm <= 0):
+        ap.error("--square-mm должен быть положительным и конечным")
     if args.board_above_table is not None and not np.isfinite(args.board_above_table):
         ap.error("--board-above-table должен быть конечным")
     if args.undistort_only:
@@ -531,12 +535,18 @@ def main():
         cv2.destroyAllWindows()
         return
 
-    board_params = {"name": args.board, **CHARUCO_BOARDS[args.board]}
+    def measured_board(params):
+        if args.square_mm is None:
+            return params
+        return dict(params, square=args.square_mm, marker=params['marker'] * args.square_mm / params['square'])
+
+    board_params = dict(name=args.board, **CHARUCO_BOARDS[args.board])
     cap = None
     if args.from_dir:
         meta_path = Path(args.from_dir) / "mode.json"
         mode = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-        board_params = mode.get("board", board_params)
+        board_params = measured_board(mode.get("board", board_params))
+        mode["board"] = board_params
         board = make_charuco_board(**{k: v for k, v in board_params.items() if k != "name"})
         print(f"Кадры из {args.from_dir} (доска {board_params}):")
         views, size, offsets = views_from_dir(args.from_dir, args, board, cv2.aruco.CharucoDetector(board),
@@ -544,7 +554,8 @@ def main():
         camera_index = mode.get("camera", args.camera)
         mode["frames_dir"] = str(Path(args.from_dir).resolve())
     else:
-        board = make_charuco_board(**CHARUCO_BOARDS[args.board])
+        board_params = measured_board(board_params)
+        board = make_charuco_board(**{k: v for k, v in board_params.items() if k != "name"})
         cap = open_camera(args.camera, args.width, args.height, fourcc=args.fourcc or None)
         focus = args.focus if args.focus is not None else load_saved_focus(args.camera)
         try:

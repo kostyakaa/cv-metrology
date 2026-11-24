@@ -33,7 +33,7 @@ def make_triangles(height, allowed, max_z_jump):
 
 def main():
     parser = argparse.ArgumentParser(description="Show a 3D surface from an EXISTING NPZ height map, without re-computing heights.")
-    parser.add_argument("npz", type=Path, help="Existing area.npz or surfaces.npz")
+    parser.add_argument("npz", type=Path, help="Existing area.npz, surfaces.npz or scan directory containing area/area.npz")
     parser.add_argument("--show", action="store_true", help="Open interactive 3D window")
     parser.add_argument("--out", type=Path, help="PNG file (default: artifacts/<scan_folder>_<input>_<mode>_3d.png)")
     parser.add_argument("--mode", choices=("confirmed", "measured", "model"), default="confirmed",
@@ -46,10 +46,15 @@ def main():
     args = parser.parse_args()
     if args.z_exaggeration <= 0 or args.max_z_jump < 0:
         parser.error("--z-exaggeration must be positive and --max-z-jump non-negative")
+    if args.npz.is_dir():
+        args.npz = args.npz / 'area' / 'area.npz'
     if not args.npz.is_file():
         parser.error(f"NPZ file not found: {args.npz}")
 
     with np.load(args.npz, allow_pickle=False) as d:
+        if "xy_origin" not in d and "table_distance" in d and "K" in d:
+            parser.error(f"Это карта опорного кадра. Для 3D по области укажите "
+                         f'"{args.npz.parent / "area" / "area.npz"}".')
         for field in ("height_mm", "xy_origin", "cell_mm"):
             if field not in d:
                 parser.error(f"{args.npz} is missing required field {field!r}")

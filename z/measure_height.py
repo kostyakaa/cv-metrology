@@ -394,6 +394,14 @@ class HeightTool(Survey):
 
     # ---------- оси: сверка с калибровкой
     def calibrate_axes(self):
+        self.require_grbl()
+        known_axes = [n for n in (100, 101) if n in self.calib_settings]
+        if known_axes:
+            current = self.grbl.settings()
+            changed = [f'${n}' for n in known_axes if current.get(n) != self.calib_settings[n]]
+            if changed:
+                raise Abort(f"Изменились {', '.join(changed)}: V_cam из профиля задаёт другой масштаб. "
+                            "Восстановите настройки профиля или измерьте ход на ChArUco заново.")
         super().calibrate_axes()
         self.check_motion()
         self.center_and_record()
@@ -487,14 +495,26 @@ class HeightTool(Survey):
         self.move_approach(c_ref - self.position())
         Os = [self.V @ (c - c_ref) for c in cs]
         d_guess = self.z_marker if self.z_marker else float(self.n_m[2] * self.K[0, 0] * self.args.marker_size / side_px)
+        valid = self.rect.valid
         res = refine_point(frames[0], frames[1:], Os[1:], self.K, self.n_m, d_guess, m0["center"], -4, 4,
-                           patch=patch, ref_valid=self.rect.valid)
+                           patch=patch, ref_valid=valid, others_valid=[valid] * (len(frames) - 1),
+                           inspect_secondary_peak=True)
         if "error" in res:
             raise Abort(f"ID{marker_id}: высота метки не измерилась ({res['error']})")
-        if (res['at_range_edge'] or not np.isfinite(res['sigma']) or res['sigma'] > .15
-                or res['score'] < .60 or res['peak_margin'] < .045 or sum(res['inlier_views']) < 3):
-            raise Abort(f"ID{marker_id}: слабый замер метки, повторите t (score={res['score']:.2f}, "
-                        f"sigma={res['sigma']:.3f}, margin={res['peak_margin']:.3f})")
+        if res['at_range_edge']:
+            raise Abort(f"ID{marker_id}: максимум на границе диапазона высот")
+        views = sum(res['inlier_views'])
+        if views < 3 or not np.isfinite(res['sigma']) or res['sigma'] > .15:
+            raise Abort(f"ID{marker_id}: нестабильная высота по ракурсам "
+                        f"(поддержка {views}, разброс среднего {res['sigma']:.3f} мм, предел 0.150)")
+        if res['score'] < .60:
+            raise Abort(f"ID{marker_id}: корреляция {res['score']:.3f} ниже 0.600")
+        secondary = res['secondary_peak_margin']
+        if secondary is not None and secondary < .045:
+            raise Abort(f"ID{marker_id}: конкурирующая высота, отрыв корреляции {secondary:.4f} < 0.0450")
+        if res['peak_margin'] < .030:
+            raise Abort(f"ID{marker_id}: широкий максимум, падение корреляции на 0,8 мм "
+                        f"{res['peak_margin']:.4f} < 0.0300")
         X = res["X"]
         dist = float(self.n_m @ X)
         side_mm = side_px * X[2] / self.K[0, 0]
@@ -503,7 +523,7 @@ class HeightTool(Survey):
         return {"W": X + self.V @ c_ref, "dist": dist, "sigma": res["sigma"], "score": res["score"],
                 "side_mm": side_mm}
 
-    def measure_table_plane(self):
+    def measure_table_plane(self, max_closure=None):
         """t: обход меток (как r) с замером высоты стола у каждой -> плоскость меток."""
         self.require_grbl()
         if (self.args.marker_grid < 2 or not np.isfinite(self.args.marker_baseline)
@@ -519,7 +539,7 @@ class HeightTool(Survey):
         self.marker_3d = {}
         self.depth_pass = True
         try:
-            self.run_survey()
+            self.run_survey(max_closure=max_closure)
         finally:
             self.depth_pass = False
         return self.save_table_plane()

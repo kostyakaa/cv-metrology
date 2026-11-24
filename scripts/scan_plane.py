@@ -5,6 +5,7 @@
     r обход четырёх углов и запись рамки -> t измерение плоскости, если требуется
     p скан всего поля змейкой -> v просмотр или повторное открытие мозаики
     WASD ручной ход, 1/2/3 шаг 0.1/1/10 мм
+    e автоматический цикл k → r → t → p по сохранённой раскладке
     b локальный скан высот вокруг текущего XY на сетке --grid x --grid
     g наведение на выбранную точку карты высот
 
@@ -31,6 +32,7 @@ $3/$100/$101 - скрипт это поймает при подключении 
 Для сравнения позиций, перекрытий и меток: python scripts/mosaic_report.py mosaics/<сеанс>/fused
 """
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -49,7 +51,7 @@ from common.registration import navigation_quality
 from common.odometry import reduced, motion_leg
 from rebuild_mosaic import rebuild
 from measure_height import HeightTool, MapWindow, add_height_args
-from survey_markers import (Abort, WindowUI, add_survey_args, find_calibration, JOG_KEYS, JOG_STEPS,
+from survey_markers import (Abort, CenteringNotConverged, WindowUI, add_survey_args, find_calibration, JOG_KEYS, JOG_STEPS,
                             LAYOUT_SETTINGS)
 
 
@@ -122,7 +124,8 @@ class PlaneScanner(HeightTool):
         self.mosaic_home_id = int(self.mosaic_meta['home_id'])
         meta = self.mosaic_meta
         if not meta.get('complete'):
-            self.say(f'ВНИМАНИЕ: скан не доведён до конца ({len(meta["records"])} кадров) - часть поля пустая')
+            state = 'кадры сняты, замыкание не подтверждено' if meta.get('capture_complete') else 'скан не завершён'
+            self.say(f'ВНИМАНИЕ: {state} ({len(meta["records"])} кадров)')
         if meta.get('focus') is not None and self.focus is not None and int(meta['focus']) != int(self.focus):
             self.say(f'ВНИМАНИЕ: скан снят при фокусе {meta["focus"]}, сейчас {self.focus} - живой кадр другого '
                      f'масштаба; на координаты мозаики это не влияет')
@@ -174,6 +177,50 @@ class PlaneScanner(HeightTool):
             self.trial_origin = self.visited[0].copy()
         self.check_mosaic_settings(cur)
 
+    def connect_for_workflow(self):
+        first_connection = self.grbl is None
+        self.connect()
+        if first_connection and self.args.auto:
+            self.run_auto()
+
+    def run_auto(self):
+        """Run the full acquisition with one approval and restore interactive navigation."""
+        self.require_grbl()
+        self.grbl.require_idle()
+        if set(self.layout) != set(range(4)):
+            raise Abort("Автоцикл требует сохранённые четыре метки. Сначала вручную c → k → r.")
+        corners = np.asarray([self.layout[i] for i in range(4)], dtype=float)
+        if corners.shape != (4, 2) or not np.isfinite(corners).all():
+            raise Abort("Автоцикл: координаты сохранённых меток некорректны")
+        hull = cv2.convexHull(corners.astype(np.float32))
+        if len(hull) != 4 or cv2.contourArea(hull) < 1:
+            raise Abort("Автоцикл: сохранённые метки не образуют рабочий контур")
+        settings = self.grbl.settings()
+        if any(n not in settings or settings[n] != self.layout_settings.get(n)
+               or settings[n] != self.calib_settings.get(n) for n in LAYOUT_SETTINGS):
+            raise Abort("Автоцикл: сверка $3/$100/$101 с раскладкой и оптическим профилем не пройдена")
+        if self.require_marker()['id'] not in self.layout:
+            raise Abort("Автоцикл: наведите камеру на угловую метку")
+        if not self.args.yes and not self.confirm(
+                "Цикл k → r → t → p пройдёт весь контур и снимет поле. Проверьте свободный ход по XY"):
+            return
+        old_confirm = self.args.confirm
+        self.args.confirm = False
+        try:
+            self.say('Автоцикл: k')
+            self.calibrate_axes()
+            if not np.array_equal(self.V, self.V_calib):
+                raise Abort("Автоцикл: направление хода не совпало с оптическим профилем")
+            self.say('Автоцикл: r')
+            self.run_survey(max_closure=.5)
+            self.say('Автоцикл: t')
+            self.measure_table_plane(max_closure=.5)
+            self.say('Автоцикл: p')
+            self.scan_plane(open_view=False)
+        finally:
+            self.args.confirm = old_confirm
+        self.show_mosaic()
+
     def capture_color(self):
         deadline=time.monotonic()+self.args.scan_settle
         while time.monotonic()<deadline:
@@ -185,7 +232,7 @@ class PlaneScanner(HeightTool):
             samples.append(frame.astype(np.float32))
         return np.mean(samples,axis=0).astype(np.uint8)
 
-    def scan_plane(self):
+    def scan_plane(self, open_view=True):
         self.require_grbl()
         if self.A is None:
             raise Abort('Сначала проверка осей k на видимой метке')
@@ -251,7 +298,7 @@ class PlaneScanner(HeightTool):
                     home_session=home.tolist(), polygon=(polygon-home).tolist(), ppm=self.args.ppm,
                     camera_matrix=self.K.tolist(), dist_coeffs=self.D.tolist(), focus=self.focus,
                     calibration=self.calib_name, model=self.calib_model, blend='central-source',
-                    grbl_settings=settings, records=[], complete=False, trial=self.args.trial,
+                    grbl_settings=settings, records=[], capture_complete=False, complete=False, trial=self.args.trial,
                     marker_positions={str(k):(np.asarray(v)-home).tolist() for k,v in exp.items()},
                     marker_size_mm=self.args.marker_size)
         def save():
@@ -323,12 +370,20 @@ class PlaneScanner(HeightTool):
                 mosaic.add(self.rect(raw),self.rect.valid,H,pos-home,raw=raw,K=self.K,D=self.D,model=self.calib_model)
                 save()
                 self.say(f'Tile {i+1}/{len(targets)}, coverage {meta["coverage_fraction"]:.1%}')
+            meta['capture_complete'] = True
             self.move(*(start-self.position()),feed=min(self.args.feed,600))
-            _,closure = self.center_on(marker['id'])
-            meta['return_to_start_mm'] = (closure-start_observation).tolist()
-            meta['end_marker_position'] = (closure-home).tolist()
-            meta['closure_command_mm'] = (closure-np.array(exp[marker['id']])).tolist()
-            meta['complete'] = True
+            try:
+                _, closure = self.center_on(marker['id'])
+            except CenteringNotConverged as exc:
+                if self.args.trial:
+                    raise
+                meta['stop_reason'] = str(exc)
+                self.say(f'Кадры сняты, замыкание не подтверждено: {exc}. Мозаика будет доступна для просмотра.')
+            else:
+                meta['return_to_start_mm'] = (closure-start_observation).tolist()
+                meta['end_marker_position'] = (closure-home).tolist()
+                meta['closure_command_mm'] = (closure-np.array(exp[marker['id']])).tolist()
+                meta['complete'] = True
         except (Abort, GrblError, RuntimeError, OSError, cv2.error) as exc:
             meta['stop_reason'] = str(exc)
             raise
@@ -344,7 +399,8 @@ class PlaneScanner(HeightTool):
         except (ValueError, OSError, cv2.error, np.linalg.LinAlgError) as exc:
             self.say(f'Не удалось уточнить мозаику: {exc}. Доступен исходный скан {folder}')
         self.say(f'Мозаика: {self.mosaic_folder}')
-        self.show_mosaic()
+        if open_view:
+            self.show_mosaic()
 
     def show_mosaic(self):
         if self.mosaic_folder is None:
@@ -455,6 +511,8 @@ def view(folder, tool=None):
     drag=[]
     selected=[]
     area_corners=[]
+    outline = []
+    roi_box = None
     name='Plane mosaic (click: coordinates, a: ROI corner, g: move, q: close)'
     cv2.namedWindow(name,cv2.WINDOW_AUTOSIZE)
     def click(event,x,y,flags,param):
@@ -473,7 +531,9 @@ def view(folder, tool=None):
         select_pixel(u, v)
 
     def select_pixel(u, v):
-        if not(0<=v<valid.shape[0] and 0<=u<valid.shape[1]) or not valid[v,u]:return
+        if not(0<=v<valid.shape[0] and 0<=u<valid.shape[1]) or not valid[v,u]:
+            selected.clear()
+            return
         xy=origin+np.array([u,v])/meta['ppm']
         command_xy = xy
         if owners is not None:
@@ -495,6 +555,16 @@ def view(folder, tool=None):
         while True:
             M=np.array([[scale,0,offset[0]],[0,scale,offset[1]]])
             shown=cv2.warpAffine(image,M,tuple(viewport),flags=cv2.INTER_NEAREST if scale>=1 else cv2.INTER_AREA)
+            def screen_points(points):
+                return np.rint((np.asarray(points)-origin)*meta['ppm']*scale+offset).astype(np.int32)
+            if outline:
+                pts = screen_points(outline)
+                cv2.polylines(shown, [pts], False, (0,220,250), 2)
+                cv2.circle(shown, pts[-1], 4, (0,220,250), -1)
+            if roi_box is not None:
+                lo, hi = roi_box
+                cv2.rectangle(shown, *screen_points([lo, hi]), (0,220,250), 2)
+                cv2.rectangle(shown, *screen_points([lo-tool.args.area_margin, hi+tool.args.area_margin]), (255,190,0), 2)
             if selected:
                 at=((selected[0]-origin)*meta['ppm']*scale+offset).round().astype(int)
                 cv2.drawMarker(shown,tuple(at),(0,0,255),cv2.MARKER_CROSS,21,1)
@@ -503,11 +573,24 @@ def view(folder, tool=None):
                                                       else 'NOT bound: c,k on a marker first')
             cv2.putText(shown,f'{scale*100:.0f}% | wheel zoom, RMB pan, LMB select | {bound}', (8,22),
                         cv2.FONT_HERSHEY_SIMPLEX,.5,(0,255,0),1)
+            if tool is not None:
+                cv2.putText(shown, 'ROI: a x2 = box | click + o = vertex | u = undo | Enter = finish',
+                            (8,44), cv2.FONT_HERSHEY_SIMPLEX,.5,(0,255,255),1)
             cv2.imshow(name,shown)
             key=cv2.waitKey(30)&255
             if key in (27,ord('q')) or cv2.getWindowProperty(name,cv2.WND_PROP_VISIBLE)<1:break
-            if key == ord('a') and tool is not None and selected:
-                area_corners.append(selected[0].copy())
+            if key == ord('u') and outline:
+                outline.pop()
+            if key == ord('o') and tool is not None and selected:
+                outline.append(selected[0].copy())
+                area_corners.clear()
+            finish_outline = key in (10, 13) and len(outline) >= 3
+            if (key == ord('a') or finish_outline) and tool is not None and selected:
+                if finish_outline:
+                    area_corners = [np.min(outline, axis=0), np.max(outline, axis=0)]
+                else:
+                    outline.clear()
+                    area_corners.append(selected[0].copy())
                 if len(area_corners) == 1:
                     print("Первая вершина области. Выберите противоположную и нажмите a.")
                 else:
@@ -524,6 +607,8 @@ def view(folder, tool=None):
                         continue
                     # Use the same owner/scale conversion as a normal click, at full mosaic resolution.
                     select_pixel(*uv)
+                    roi_box = np.minimum(first, second), np.maximum(first, second)
+                    outline.clear()
                     tool.args.area_mm = dims.tolist()
                     print(f"Область {dims.round(2)} мм, запас {tool.args.area_margin:g} мм. "
                           "g — к центру, q — закрыть мозаику, b — скан.")
@@ -564,9 +649,18 @@ def preflight(args, names, ports):
         errors.append('Калибровка кадра и плоскости несовместима')
     else:
         mode = calib['mode']
+        profile_id = hashlib.sha256(json.dumps(calib, sort_keys=True).encode()).hexdigest()
+        if plane.get('profile_id') and plane['profile_id'] != profile_id:
+            errors.append('Плоскость снята с другим содержимым оптического профиля')
+        if plane.get('head_z_mm') != args.head_z_mm:
+            errors.append('Плоскость снята при другом положении головки Z')
         print(f"{path.name}, {args.width}x{args.height}, focus {mode.get('focus')}, RMS {calib['rms']:.3f} px")
-        if not (calib['machine_check'] or {}).get('motion') or mode.get('focus') is None:
+        machine = calib.get('machine_check') or {}
+        if not machine.get('motion') or mode.get('focus') is None:
             errors.append('В калибровке нет хода станка или значения фокуса')
+        if machine.get('real_per_cmd_x') is not None and machine.get('real_per_cmd_y') is not None:
+            print(f"Масштаб по ChArUco: X {machine['real_per_cmd_x']:.5f}, "
+                  f"Y {machine['real_per_cmd_y']:.5f} мм на командный мм")
         if frame.get('focus') != mode.get('focus') or frame.get('frame_size') != calib['image_size']:
             errors.append('Режим камеры при обходе меток отличается от калибровки')
         settings = mode.get('grbl_settings',{})
@@ -610,12 +704,16 @@ def main():
     ap.add_argument('--tile-step',type=float,default=20)
     ap.add_argument('--ppm',type=float,default=10)
     ap.add_argument('--trial',action='store_true',help='локальная аппаратная проба: квадрат 6 мм, возврат, только c/k/p/v/q')
+    ap.add_argument('--auto', action='store_true', help='после подключения c запустить k → r → t → p')
+    ap.add_argument('--yes', action='store_true', help='пропустить общее подтверждение автоцикла (c с --auto или e)')
     ap.add_argument('--preflight',action='store_true',help='проверить файлы и перечень устройств, без открытия камеры и порта')
     ap.add_argument('--camera-name',help='точное имя DirectShow; при пробе в Windows по умолчанию UC60 Video')
     ap.add_argument('--view',type=str,help='показать сохранённый скан, без камеры и станка')
     ap.add_argument('--open',type=str,
                     help='открыть сохранённый скан "как после съёмки": клик/g ведут станок после c -> k -> h')
     args=ap.parse_args()
+    if (args.auto or args.yes) and (args.trial or args.preflight or args.view or args.no_calib):
+        ap.error('--auto/--yes предназначены для рабочего режима с калибровкой')
     if args.view:return view(args.view)
     if args.trial or args.preflight:
         if not args.confirm or args.open or args.no_calib or not (0 < args.probe <= 2):
@@ -671,16 +769,19 @@ def main():
                 tool.open_mosaic(args.open)
             except Abort as e:
                 raise SystemExit(f'не открыть мозаику: {e}')
-        actions={ord('c'):tool.connect,ord('k'):tool.calibrate_axes,ord('m'):tool.center_and_record,
+        actions={ord('c'): (tool.connect_for_workflow if args.auto else tool.connect),ord('k'):tool.calibrate_axes,ord('m'):tool.center_and_record,
                  ord('r'):tool.run_survey,ord('t'):tool.measure_table_plane,ord('p'):tool.scan_plane,
                  ord('v'):tool.show_mosaic,ord('h'):tool.go_home,ord('z'):tool.set_zero,
-                 ord('j'):tool.scan_focus_z,ord('b'):tool.scan_heights,ord('g'):tool.go_selected}
+                 ord('e'):tool.run_auto,ord('j'):tool.scan_focus_z,ord('b'):tool.scan_heights,ord('g'):tool.go_selected}
         if args.trial:
             actions = {k:fn for k,fn in actions.items() if k in map(ord,'ckpv')}
             print('Диагностика у метки: c подключение, k проверка осей, p квадрат 6 мм и возврат, v просмотр, q выход.')
             print('Для обхода r, WASD и полного скана p закройте пробу и запустите скрипт без --trial.')
         else:
             print(__doc__)
+            if args.auto:
+                print('Автоцикл активирован. c на видимой угловой метке запустит k → r → t → p '
+                      + ('сразу после проверок.' if args.yes else 'после общего подтверждения.'))
         while True:
             frame=read_frame(cap)
             found=detect(tool.detector,cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY))

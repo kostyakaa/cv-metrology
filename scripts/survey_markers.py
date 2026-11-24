@@ -67,6 +67,10 @@ class Abort(Exception):
     pass
 
 
+class CenteringNotConverged(Abort):
+    """The visible marker could not be centered within the acceptance tolerance."""
+
+
 def unit(v):
     v = np.asarray(v, float)
     return v / np.linalg.norm(v)
@@ -248,9 +252,10 @@ class Survey:
         return self.ui.show(self.render(frame, detect(self.detector, cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))))
 
     def confirm(self, msg):
-        self.say(msg + "   [y] да / [n] нет")
         if not self.args.confirm:
+            self.say(msg)
             return True
+        self.say(msg + "   [y] да / [n] нет")
         while True:
             key = self.wait_key()
             if key == ord('y'):
@@ -468,22 +473,26 @@ class Survey:
         mid = m0["id"]
         s_mark = marker_scale(m0["corners"], self.args.marker_size)
         d = min(self.args.probe, 0.12 * min(self.size) / s_mark)  # уход до 2d - метка остаётся в кадре
-        if not self.confirm(f"пробные ходы по метке ID{mid}: X +{d:.2f} +{d:.2f} -{d:.2f} -{d:.2f}, затем так же "
-                            f"по Y (F{self.args.slow_feed})"):
+        signs = np.ones(2)
+        if mid in self.layout and len(self.layout) == 4:
+            inward = np.mean(list(self.layout.values()), axis=0) - self.layout[mid]
+            signs = np.where(inward < 0, -1., 1.)
+        if not self.confirm(f"проба ID{mid}: X {signs[0]*d:+.2f} дважды и обратно, затем "
+                            f"Y {signs[1]*d:+.2f} дважды и обратно (F{self.args.slow_feed})"):
             raise Abort("отладка осей отменена")
 
         cols, backlash = [], []
         for axis, name in ((0, "X"), (1, "Y")):
             pts = [m0["center"] if axis == 0 else self.require_marker(mid)["center"]]
             for sign in (1, 1, -1, -1):
-                self.move(*(np.eye(2)[axis] * sign * d), feed=self.args.slow_feed)
+                self.move(*(np.eye(2)[axis] * signs[axis] * sign * d), feed=self.args.slow_feed)
                 m = self.measure(mid)
                 if m is None:
                     raise Abort(f"после хода {name}{'+' if sign > 0 else '-'} метка ID{mid} пропала из кадра - "
                                 f"дальше не двигаю")
                 pts.append(m["center"])
             p0, pa, pb, pc, pd = pts
-            col = ((pb - pa) - (pd - pc)) / (2 * d)
+            col = ((pb - pa) - (pd - pc)) / (2 * d * signs[axis])
             cols.append(col)
             backlash.append(max(0.0, float(d - np.linalg.norm(pc - pb) / np.linalg.norm(col))))
         A = np.column_stack(cols)
@@ -575,10 +584,11 @@ class Survey:
         if self.A is None:
             raise Abort("сначала отладка осей (k)")
         Ainv = np.linalg.inv(self.A)
-        if np.any(self.last_dir <= 0):  # люфт выбран не с той стороны - замер дал бы смещение на весь люфт
-            self.move_approach(np.zeros(2))
         m = self.require_marker(marker_id)
         marker_id = m["id"]
+        if np.any(self.last_dir <= 0):  # люфт выбран не с той стороны - замер дал бы смещение на весь люфт
+            self.move_approach(np.zeros(2))
+            m = self.require_marker(marker_id)
         prev = None
         for i in range(self.args.max_iter + 1):
             mv = Ainv @ (self.target - m["center"])
@@ -601,18 +611,31 @@ class Survey:
                 mv = mv / n * self.args.max_servo
             self.move_approach(mv)
             m = self.require_marker(marker_id)
-        raise Abort(f"наведение на ID{marker_id} не сошлось: остаток {n:.3f} мм больше --accept {self.args.accept} мм")
+        raise CenteringNotConverged(
+            f"наведение на ID{marker_id} не сошлось: остаток {n:.3f} мм больше --accept {self.args.accept} мм"
+        )
 
     def record(self, marker_id, pos, save=True):
+        predicted = self.expected().get(marker_id)
+        if predicted is not None:
+            self.check_marker_position(marker_id, predicted, pos)
         old = self.markers.get(marker_id)
         self.markers[marker_id] = np.asarray(pos, float)
         note = "" if old is None else f" (от прошлого замера {fmt_move(pos - old)} = {np.linalg.norm(pos - old):.3f} мм)"
         self.say(f"ID{marker_id} записана{note}; записаны: {', '.join(f'ID{k}' for k in sorted(self.markers))}")
         if save and len(self.markers) >= 4:
+            self.closure = None  # A single updated corner does not measure a new loop closure.
             self.save_frame()
 
     def center_and_record(self):
         self.record(*self.center_on())
+
+    @staticmethod
+    def check_marker_position(marker_id, predicted, measured):
+        delta = np.asarray(measured) - predicted
+        if not np.isfinite(delta).all() or np.linalg.norm(delta) > .5:
+            raise Abort(f"ID{marker_id}: расхождение с раскладкой {fmt_move(delta)} мм "
+                        "(предел 0.5 мм). Проверьте привязку, повторное подключение и положение меток.")
 
     def verify_direction(self, marker_id, direction):
         """Пробный ход в сторону цели, пока видна текущая метка: картинка должна сдвинуться так, как предсказывает
@@ -633,6 +656,10 @@ class Survey:
     def travel_to_point(self, target, what):
         """По прямой в известную точку (внутри зоны, где станок был) с пробой направления."""
         here = self.require_marker()  # ехать только от видимой метки: по ней проверяется направление
+        anchor = self.expected().get(here["id"])
+        if anchor is not None:
+            observed = self.position() + np.linalg.solve(self.A, self.target - here["center"])
+            self.check_marker_position(here["id"], anchor, observed)
         delta = np.asarray(target, float) - self.position()
         dist = float(np.linalg.norm(delta))
         if dist <= 3 * self.args.probe:
@@ -652,10 +679,18 @@ class Survey:
         exp = self.expected()
         if marker_id not in exp:
             raise Abort(f"где ID{marker_id}, ещё неизвестно - обход r или подведите камеру (wasd) и m")
-        self.travel_to_point(exp[marker_id], f"ID{marker_id}")
-        if self.measure(marker_id) is None:
+        target = exp[marker_id]
+        delta = target - self.position()
+        # Stop inside the approach leg, with the marker within the calibrated field of view.
+        approach = min(12., .25 * min(self.size) / np.linalg.norm(self.A, ord=2))
+        if np.linalg.norm(delta) > approach:
+            self.travel_to_point(target - unit(delta)*approach, f"подхода к ID{marker_id}")
+        marker = self.measure(marker_id)
+        if marker is None:
             raise Abort(f"ID{marker_id} нет там, где она была записана - метку сдвинули или станок потерял шаги. "
                         f"Подведите камеру вручную и m")
+        observed = self.position() + np.linalg.solve(self.A, self.target - marker['center'])
+        self.check_marker_position(marker_id, target, observed)
         return self.center_on(marker_id)
 
     def explore_leg(self, here_id, direction):
@@ -696,11 +731,22 @@ class Survey:
             raise Abort(f"в {what} новой метки нет - прямоугольник не сходится? Подведите камеру вручную и m")
         return self.center_on(min(new, key=lambda k: np.linalg.norm(found[k].mean(axis=0) - self.target)))
 
-    def run_survey(self):
+    def run_survey(self, max_closure=None):
         """Обход: по известной раскладке - сам; иначе по направлениям, которые укажет человек."""
         self.require_grbl()
         if self.A is None:
             raise Abort("сначала отладка осей (k)")
+        previous_markers, previous_closure = self.markers, self.closure
+        self.markers = previous_markers.copy()
+        try:
+            return self._collect_survey(max_closure)
+        except BaseException:
+            # A rejected or interrupted pass must not become the anchor for later travel.
+            self.markers, self.closure = previous_markers, previous_closure
+            self.last_centered = None
+            raise
+
+    def _collect_survey(self, max_closure):
         start, pos = self.center_on()
         self.record(start, pos, save=False)
         first = self.markers[start]
@@ -729,6 +775,8 @@ class Survey:
         err = float(np.linalg.norm(self.closure))
         self.say(f"ошибка замыкания (возврат на ID{start}): {fmt_move(self.closure)} = {err:.3f} мм"
                  + ("  <- больше 0.05: пропуск шагов/люфт/проскальзывание?" if err > 0.05 else ""))
+        if max_closure is not None and (not np.isfinite(err) or err > max_closure):
+            raise Abort(f"Замыкание {err:.3f} мм. Предел {max_closure:g} мм, раскладка не обновлена.")
         return self.save_frame()
 
     def home_id(self):
